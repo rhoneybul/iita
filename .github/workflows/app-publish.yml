@@ -1,0 +1,415 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Publish the iita mobile app to Expo / the App Store
+#
+# Lifted from etapa/.github/workflows/app-publish.yml — same flow,
+# trimmed of bits iita doesn't have yet (test suite, Maestro E2E).
+#
+# Nothing here runs automatically on push to main. Two explicit triggers:
+#
+#   1. Manual dispatch (recommended day-to-day) —
+#      Actions → "Publish iita App" → Run workflow.
+#      Pick release type + version bump + platform.
+#
+#   2. Git tag matching `app-v*` — pushes a real release and submits to the
+#      App Store. Use for proper versioned releases.
+#        git tag app-v0.2.0 && git push --tags
+#
+# Two release paths available from either trigger:
+#   - OTA update   (EAS Update)  — JS-only changes, ~2 min, no store review
+#   - Native build (EAS Build)   — native deps / config changes, ~20-40 min,
+#                                  optionally submits to the App Store.
+#
+# Required GitHub secrets (Settings → Secrets → Actions):
+#   EXPO_TOKEN          — expo.dev → Settings → Access Tokens → Create.
+#   SENTRY_AUTH_TOKEN   — optional, only needed if you wire up Sentry.
+#
+# Versioning:
+#   Release version is derived from the highest `app-v*` git tag on origin,
+#   then bumped by the input `bump`. app.json on main is treated as a
+#   suggestion; tags are the real source of truth. The "Tag + GitHub
+#   Release" step at the end pushes the new tag on success.
+#
+# Build order:
+#   When platform=all, iOS builds/submits FIRST, Android second. iOS
+#   review takes longer; getting it in the queue first minimises the
+#   wall-time to "everyone has the new build".
+# ──────────────────────────────────────────────────────────────────────────────
+name: Publish iita App
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'build'
+        type: choice
+        options:
+          - ota             # OTA update only — fast, no app store review
+          - build           # Native build, don't submit
+          - build-submit    # Native build + submit to App Store / Play
+      bump:
+        description: 'Version bump (patch is almost always what you want). "none" is only valid for OTA updates.'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - none
+      platform:
+        description: 'Platform(s)'
+        required: true
+        default: 'ios'
+        type: choice
+        options:
+          - ios
+          - android
+          - all
+      channel:
+        description: 'OTA channel (only used for release_type=ota)'
+        required: false
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - preview
+      dry_run:
+        description: 'Dry run — preflight + version resolution only, no publish'
+        required: false
+        default: false
+        type: boolean
+
+  push:
+    tags:
+      - 'app-v*'
+
+concurrency:
+  group: app-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── 1. Decide release parameters ───────────────────────────────────────────
+  decide:
+    name: Decide
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.decide.outputs.should_publish }}
+      release_type:   ${{ steps.decide.outputs.release_type }}
+      bump:           ${{ steps.decide.outputs.bump }}
+      platform:       ${{ steps.decide.outputs.platform }}
+      channel:        ${{ steps.decide.outputs.channel }}
+      dry_run:        ${{ steps.decide.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: decide
+        name: Decide release path
+        run: |
+          SHOULD=false
+          TYPE="build"
+          BUMP="patch"
+          PLATFORM="ios"
+          CHANNEL="production"
+          DRY_RUN=false
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD=true
+            TYPE="${{ github.event.inputs.release_type }}"
+            BUMP="${{ github.event.inputs.bump }}"
+            PLATFORM="${{ github.event.inputs.platform }}"
+            CHANNEL="${{ github.event.inputs.channel }}"
+            DRY_RUN="${{ github.event.inputs.dry_run }}"
+          elif [[ "${{ github.ref }}" == refs/tags/app-v* ]]; then
+            # Tag push = real release — build + submit
+            SHOULD=true
+            TYPE="build-submit"
+            BUMP="none"          # tag IS the version of record
+            PLATFORM="ios"
+            CHANNEL="production"
+          fi
+
+          echo "should_publish=$SHOULD" >> "$GITHUB_OUTPUT"
+          echo "release_type=$TYPE"     >> "$GITHUB_OUTPUT"
+          echo "bump=$BUMP"             >> "$GITHUB_OUTPUT"
+          echo "platform=$PLATFORM"     >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL"       >> "$GITHUB_OUTPUT"
+          echo "dry_run=$DRY_RUN"       >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Release plan"
+            echo "- Publish? **$SHOULD**"
+            echo "- Type: **$TYPE**"
+            echo "- Bump: **$BUMP**"
+            echo "- Platform: **$PLATFORM**"
+            echo "- Channel: **$CHANNEL**"
+            echo "- Dry run? **$DRY_RUN**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── 2. Preflight — lint only (no test suite yet on iita) ───────────────────
+  preflight:
+    name: Preflight (lint)
+    needs: decide
+    if: needs.decide.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate app.json + package.json JSON
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('app.json','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
+          echo "✓ app.json + package.json are valid JSON"
+
+      - name: Expo Doctor (dependency + config sanity)
+        run: npx expo-doctor@latest
+
+      - name: TypeScript check (if tsconfig present)
+        run: |
+          if [ -f "tsconfig.json" ]; then
+            echo "→ Running tsc --noEmit"
+            npx tsc --noEmit --skipLibCheck
+          else
+            echo "→ No tsconfig.json found — skipping TypeScript check"
+          fi
+
+      - name: Metro bundle compile check
+        run: |
+          # Catches import errors, missing modules, syntax errors. Doesn't
+          # hit any API, doesn't boot the app, doesn't need a simulator.
+          npx expo export --platform web --output-dir /tmp/expo-check --dump-sourcemap false 2>&1
+
+  # ── 3. Publish (EAS Update for OTA, EAS Build for native) ──────────────────
+  publish:
+    name: Publish (${{ needs.decide.outputs.release_type }})
+    needs: [decide, preflight]
+    if: |
+      needs.decide.outputs.should_publish == 'true'
+      && needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write        # for git push + release creation
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Setup EAS early so the baseline step below can query the remote
+      # version.
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # ── Resolve target version from git tags (the real source of truth) ──
+      - name: Resolve target version
+        id: version
+        run: |
+          git fetch --tags origin 2>/dev/null || true
+
+          RELEASE_TYPE="${{ needs.decide.outputs.release_type }}"
+          BUMP="${{ needs.decide.outputs.bump }}"
+
+          # bump=none is only valid for OTA — native builds must always bump
+          # the version, otherwise Apple/Google reject the duplicate.
+          if [ "$BUMP" = "none" ] && [ "$RELEASE_TYPE" != "ota" ] && [[ "${{ github.ref }}" != refs/tags/app-v* ]]; then
+            echo ""
+            echo "::error::bump=none is only valid for release_type=ota or a tag push."
+            echo "::error::Native builds must always bump the version. Re-run with bump=patch (or higher)."
+            exit 1
+          fi
+
+          # Baseline = max(highest git tag, app.json, EAS remote). Three
+          # sources can drift; take the highest so we never produce a
+          # version lower than something already shipped.
+          HIGHEST_TAG=$(git tag -l 'app-v*' | sed 's/^app-v//' | sort -V | tail -1)
+          APPJSON_VER=$(node -e "console.log(JSON.parse(require('fs').readFileSync('app.json','utf8')).expo.version)")
+
+          EAS_REMOTE_VER=""
+          if command -v eas >/dev/null 2>&1; then
+            EAS_REMOTE_VER=$(eas build:version:get --platform ios --profile production --non-interactive 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+            if [ -z "$EAS_REMOTE_VER" ]; then
+              EAS_REMOTE_VER=$(eas build:version:get --platform android --profile production --non-interactive 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+            fi
+          fi
+
+          BASELINE=$(printf '%s\n%s\n%s\n' "${HIGHEST_TAG:-0.0.0}" "${APPJSON_VER:-0.0.0}" "${EAS_REMOTE_VER:-0.0.0}" | sort -V | tail -1)
+          if [ "$BASELINE" = "0.0.0" ]; then BASELINE="$APPJSON_VER"; fi
+
+          echo "→ Highest release tag: ${HIGHEST_TAG:-(none)}"
+          echo "→ app.json version:    $APPJSON_VER"
+          echo "→ EAS remote version:  ${EAS_REMOTE_VER:-(unknown)}"
+          echo "→ Baseline for bump:   $BASELINE"
+
+          # Sync app.json up to baseline in the runner (ephemeral — never pushed back).
+          if [ "$BASELINE" != "$APPJSON_VER" ]; then
+            node scripts/bump-app-version.js "$BASELINE" > /dev/null
+            echo "→ Synced app.json up to baseline $BASELINE (runner-local only)"
+          fi
+
+          if [[ "${{ github.ref }}" == refs/tags/app-v* ]]; then
+            V="${GITHUB_REF#refs/tags/app-v}"
+            NEW=$(node scripts/bump-app-version.js "$V")
+          else
+            NEW=$(node scripts/bump-app-version.js "$BUMP")
+          fi
+
+          echo "→ Target version: $NEW"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "## Version: \`$NEW\`" >> "$GITHUB_STEP_SUMMARY"
+
+          # No-op guard — native build must actually change the version.
+          if [ "$NEW" = "$BASELINE" ] && [ "$RELEASE_TYPE" != "ota" ]; then
+            echo ""
+            echo "::error::Resolved version ($NEW) is the same as the baseline ($BASELINE) — no bump applied."
+            echo "::error::This would ship a duplicate. Re-run with a bigger bump."
+            exit 1
+          fi
+
+          # Collision precheck — refuse to rebuild a version that's already been tagged.
+          if git rev-parse "refs/tags/app-v$NEW" >/dev/null 2>&1; then
+            echo ""
+            echo "::error::Tag app-v$NEW already exists — this version has already been built."
+            echo "::error::Apple/Google will reject duplicate submissions. Pick a bigger bump or delete the stale tag."
+            exit 1
+          fi
+
+          # Monotonic precheck — must be strictly > every existing release tag.
+          is_greater() {
+            [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]
+          }
+          VIOLATIONS=""
+          while read -r T; do
+            [ -z "$T" ] && continue
+            EXISTING="${T#app-v}"
+            if ! is_greater "$NEW" "$EXISTING"; then
+              VIOLATIONS="$VIOLATIONS $EXISTING"
+            fi
+          done < <(git tag -l 'app-v*' | sort -V)
+
+          if [ -n "$VIOLATIONS" ]; then
+            echo ""
+            echo "::error::Target version $NEW is not strictly greater than existing release tag(s):$VIOLATIONS"
+            echo "::error::Versions only go up. Re-run with a larger bump."
+            exit 1
+          fi
+
+      # Pin EAS remote version to $NEW. eas.json autoIncrement bumps only the
+      # build number; the semver version has to be set explicitly here.
+      - name: Pin EAS remote version to ${{ steps.version.outputs.new }}
+        if: needs.decide.outputs.release_type != 'ota' && needs.decide.outputs.dry_run != 'true'
+        run: |
+          NEW="${{ steps.version.outputs.new }}"
+          echo "→ Setting EAS remote version for iOS + Android to $NEW"
+          eas build:version:set --platform ios --profile production --value "$NEW" --non-interactive || \
+            echo "::warning::Failed to pin iOS remote version to $NEW — proceeding; autoIncrement will bump build number only"
+          eas build:version:set --platform android --profile production --value "$NEW" --non-interactive || \
+            echo "::warning::Failed to pin Android remote version to $NEW — proceeding; autoIncrement will bump versionCode only"
+
+      - name: Skip publish (dry run)
+        if: needs.decide.outputs.dry_run == 'true'
+        run: |
+          echo "→ Dry run — skipping EAS operations"
+          echo "- **DRY RUN** — no actual publish happened" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── OTA update path ─────────────────────────────────────────────────────
+      - name: EAS Update (OTA)
+        if: needs.decide.outputs.release_type == 'ota' && needs.decide.outputs.dry_run != 'true'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          CHANNEL="${{ needs.decide.outputs.channel }}"
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+            echo "::warning::SENTRY_AUTH_TOKEN not set — OTA source maps will NOT be uploaded."
+          fi
+          eas update \
+            --branch "$CHANNEL" \
+            --message "v${{ steps.version.outputs.new }} — $(git log -1 --pretty=%s | head -c 80)" \
+            --non-interactive
+          echo "- Published OTA update to **$CHANNEL** channel" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Native build path ───────────────────────────────────────────────────
+      - name: EAS Build
+        if: needs.decide.outputs.release_type == 'build' && needs.decide.outputs.dry_run != 'true'
+        run: |
+          PLATFORM="${{ needs.decide.outputs.platform }}"
+          if [ "$PLATFORM" = "all" ]; then
+            echo "→ Platform=all: kicking iOS first, then Android…"
+            eas build --profile production --platform ios     --non-interactive --no-wait
+            eas build --profile production --platform android --non-interactive --no-wait
+            echo "- Kicked off EAS Build on **iOS** then **Android**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            eas build --profile production --platform "$PLATFORM" --non-interactive --no-wait
+            echo "- Kicked off EAS Build on **$PLATFORM**" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "- Watch it at https://expo.dev/accounts/rhoneybul/projects/iita/builds" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Submit path ────────────────────────────────────────────────────────
+      - name: EAS Build + Submit (wait)
+        if: needs.decide.outputs.release_type == 'build-submit' && needs.decide.outputs.dry_run != 'true'
+        run: |
+          PLATFORM="${{ needs.decide.outputs.platform }}"
+          if [ "$PLATFORM" = "all" ]; then
+            echo "→ Platform=all: building + submitting iOS first, then Android…"
+            eas build --profile production --platform ios     --non-interactive --auto-submit
+            eas build --profile production --platform android --non-interactive --auto-submit
+            echo "- Auto-submitted **iOS** then **Android** to the stores" >> "$GITHUB_STEP_SUMMARY"
+          else
+            eas build --profile production --platform "$PLATFORM" --non-interactive --auto-submit
+            echo "- Auto-submitted to the store" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # ── Tag + Release on success ───────────────────────────────────────────
+      - name: Tag + GitHub Release
+        if: needs.decide.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TYPE: ${{ needs.decide.outputs.release_type }}
+          PLATFORM: ${{ needs.decide.outputs.platform }}
+          VERSION: ${{ steps.version.outputs.new }}
+        run: |
+          TAG="app-v${VERSION}"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+          LAST_TAG=$(git describe --tags --abbrev=0 --match='app-v*' "HEAD^" 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          {
+            echo "Release type: **${RELEASE_TYPE}**"
+            echo "Platform: ${PLATFORM}"
+            echo ""
+            echo "### Changes"
+            git log --pretty='* %s (%h)' "${LAST_TAG}..HEAD" -- . ':!server' 2>/dev/null | head -30
+          } > /tmp/release-notes.md
+
+          gh release create "$TAG" \
+            --title "iita App v${VERSION}" \
+            --notes-file /tmp/release-notes.md \
+            --latest || echo "Release already exists, skipping"
