@@ -58,6 +58,7 @@ import WebWrapper from './src/components/WebWrapper';
 import analytics from './src/services/analyticsService';
 import { getSession, getCurrentUser, signOut, onAuthStateChange } from './src/services/authService';
 import { ensureUserData, hydrateFromServer, getUserPrefs } from './src/services/storageService';
+import { registerForPushNotifications } from './src/services/notificationService';
 
 import SignInScreen          from './src/screens/SignInScreen';
 import HomeScreen            from './src/screens/HomeScreen';
@@ -182,6 +183,11 @@ function App() {
 
         const cleared = await ensureUserData(session.user?.id);
         await hydrateFromServer({ force: cleared });
+
+        // Fire-and-forget push registration. Permission prompt fires
+        // here on first run — declining is fine, pull-to-refresh still
+        // works.
+        registerForPushNotifications().catch(() => {});
 
         const prefs = await getUserPrefs();
         setInitialRoute(prefs?.displayName ? 'Home' : 'OnboardingName');

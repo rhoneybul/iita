@@ -53,5 +53,8 @@ export const api = {
     upsert: (kind, item) => request(`/state/list/${kind}`,        { method: 'PUT',    body: item }),
     remove: (kind, id)   => request(`/state/list/${kind}/${id}`,  { method: 'DELETE' }),
   },
+  notifications: {
+    registerToken: (payload) => request('/notifications/token', { method: 'POST', body: payload }),
+  },
   parseWeek: (input) => request('/parse-week', { method: 'POST', body: input }),
 };

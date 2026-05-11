@@ -307,6 +307,16 @@ app.put('/state/event', auth, withPair, async (req, res) => {
   if (!supabase) return res.status(204).end();
   const e = req.body;
   if (!e?.id || !e?.date || !e?.title) return res.status(400).json({ error: 'id/date/title required' });
+
+  // Was this row already in the table? Drives the push-vs-skip decision
+  // below: edits are silent, only the partner adding a new event pings.
+  const { data: existing } = await supabase
+    .from('iita_events')
+    .select('id')
+    .eq('id', e.id)
+    .maybeSingle();
+  const isNew = !existing;
+
   const { error } = await supabase.from('iita_events').upsert({
     id:        e.id,
     pair_id:   req.pair.id,
@@ -319,6 +329,15 @@ app.put('/state/event', auth, withPair, async (req, res) => {
     created_by: req.user.id,
   });
   if (error) return res.status(500).json({ error: 'upsert_failed', message: error.message });
+
+  if (isNew) {
+    notifyPartner(req, {
+      title: 'New event added',
+      body: `${e.title} — ${formatEventDate(e.date)}`,
+      data: { type: 'event_added', eventId: e.id, date: e.date },
+    });
+  }
+
   res.status(204).end();
 });
 
@@ -365,6 +384,85 @@ app.delete('/state/list/:kind/:id', auth, withPair, async (req, res) => {
     .eq('id', req.params.id);
   res.status(204).end();
 });
+
+// ── Push notifications ───────────────────────────────────────────────────────
+//
+// One Expo push token per user (latest write wins). The notifyPartner
+// helper looks up the OTHER member of the caller's pair and fires a push
+// via Expo's HTTP endpoint. Fire-and-forget — the calling route doesn't
+// await it, so a slow Expo response never delays the API reply to the
+// person who triggered the write.
+
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function formatEventDate(iso) {
+  // iso is YYYY-MM-DD; we hand-format to dodge timezone weirdness on the
+  // server (Date(iso) is UTC midnight, which renders the day before in
+  // negative-offset zones).
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  if (!m) return iso || '';
+  const month = MONTHS_SHORT[parseInt(m[2], 10) - 1] || '';
+  return `${parseInt(m[3], 10)} ${month}`;
+}
+
+app.post('/notifications/token', auth, async (req, res) => {
+  if (!supabase) return res.status(204).end();
+  const { token, platform } = req.body || {};
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'token required' });
+  }
+  const { error } = await supabase.from('iita_push_tokens').upsert({
+    user_id:    req.user.id,
+    token,
+    platform:   platform || null,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) return res.status(500).json({ error: 'upsert_failed', message: error.message });
+  res.status(204).end();
+});
+
+async function notifyPartner(req, { title, body, data = {} }) {
+  if (!supabase) return;
+  try {
+    const partnerIds = (req.pair?.members || [])
+      .map(m => m.user_id)
+      .filter(id => id && id !== req.user.id);
+    if (partnerIds.length === 0) return;
+
+    const { data: tokens } = await supabase
+      .from('iita_push_tokens')
+      .select('user_id, token')
+      .in('user_id', partnerIds);
+    if (!tokens?.length) return;
+
+    const messages = tokens.map(t => ({
+      to: t.token,
+      sound: 'default',
+      title,
+      body,
+      data,
+    }));
+
+    const r = await fetch(EXPO_PUSH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(messages),
+    });
+    const out = await r.json().catch(() => null);
+
+    // Expo flags DeviceNotRegistered for tokens whose device wiped the
+    // app — clear them so we don't keep posting to ghost endpoints.
+    const tickets = out?.data || [];
+    for (let i = 0; i < tickets.length; i++) {
+      if (tickets[i]?.status === 'error' && tickets[i]?.details?.error === 'DeviceNotRegistered') {
+        await supabase.from('iita_push_tokens').delete().eq('token', tokens[i].token);
+      }
+    }
+  } catch (e) {
+    console.warn('[notifyPartner]', e?.message || e);
+  }
+}
 
 // ── Pair management ──────────────────────────────────────────────────────────
 //
