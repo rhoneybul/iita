@@ -1,0 +1,19 @@
+# Speed up Railway builds by skipping everything that isn't the server.
+# Without this Railway uploads the entire React Native app on every push.
+
+App.js
+app.json
+babel.config.js
+metro.config.js
+eas.json
+index.js
+src/
+assets/
+ios/
+android/
+.expo/
+.expo-shared/
+dist/
+web-build/
+supabase/
+*.md

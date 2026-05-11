@@ -1,0 +1,13 @@
+# Nixpacks (Railway's default builder) needs to know where the actual
+# server lives in this monorepo. Without this it would try to `npm
+# install` at the repo root, find the Expo app, and fail because the
+# native React Native deps don't install on Linux.
+
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = ["cd server && npm install"]
+
+[start]
+cmd = "cd server && node index.js"
