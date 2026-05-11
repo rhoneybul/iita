@@ -19,7 +19,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.iita.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSSpeechRecognitionUsageDescription": "iita uses on-device speech recognition to turn what you say into text. Audio stays on your phone.",
+        "NSMicrophoneUsageDescription": "iita uses the microphone so you can dictate the week instead of typing."
       },
       "buildNumber": "1"
     },
@@ -35,7 +37,13 @@
       },
       "package": "com.iita.app",
       "versionCode": 1,
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -64,7 +72,11 @@
       "expo-asset"
     ],
     "extra": {
-      "serverUrl": ""
-    }
+      "serverUrl": "",
+      "eas": {
+        "projectId": "4edf0333-ee38-4e43-892b-d6069bb45c88"
+      }
+    },
+    "owner": "rhoneybul"
   }
 }
