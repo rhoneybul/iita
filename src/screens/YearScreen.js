@@ -103,6 +103,10 @@ export default function YearScreen({ navigation }) {
     load();
   }
 
+  function openEdit(ev) {
+    navigation.navigate('AddEvent', { eventId: ev.id });
+  }
+
   function handleEventPress(ev) {
     const doneOption = ev.done ? 'Mark not done' : 'Mark done';
     if (Platform.OS === 'ios') {
@@ -110,18 +114,20 @@ export default function YearScreen({ navigation }) {
         {
           title: ev.title,
           message: formatDateRange(ev),
-          options: [doneOption, 'Delete', 'Cancel'],
-          destructiveButtonIndex: 1,
-          cancelButtonIndex: 2,
+          options: ['Edit', doneOption, 'Delete', 'Cancel'],
+          destructiveButtonIndex: 2,
+          cancelButtonIndex: 3,
           userInterfaceStyle: 'dark',
         },
         (i) => {
-          if (i === 0) toggleDone(ev);
-          else if (i === 1) remove(ev);
+          if (i === 0) openEdit(ev);
+          else if (i === 1) toggleDone(ev);
+          else if (i === 2) remove(ev);
         },
       );
     } else {
       Alert.alert(ev.title, formatDateRange(ev), [
+        { text: 'Edit',     onPress: () => openEdit(ev) },
         { text: doneOption, onPress: () => toggleDone(ev) },
         { text: 'Delete', style: 'destructive', onPress: () => remove(ev) },
         { text: 'Cancel', style: 'cancel' },

@@ -152,10 +152,19 @@ export default function HomeScreen({ navigation }) {
               {dayEvents.length > 0 && (
                 <View style={s.evRow}>
                   {dayEvents.map(e => (
-                    <View key={e.id} style={s.evPill}>
-                      <Ionicons name="star" size={9} color={colors.primary} />
-                      <Text style={s.evPillText}>{e.title}</Text>
-                    </View>
+                    <TouchableOpacity
+                      key={e.id}
+                      style={s.evPill}
+                      activeOpacity={0.7}
+                      onPress={() => navigation.navigate('AddEvent', { eventId: e.id })}
+                    >
+                      <Ionicons
+                        name={e.done ? 'checkmark-circle' : 'star'}
+                        size={10}
+                        color={e.done ? colors.good : colors.primary}
+                      />
+                      <Text style={[s.evPillText, e.done && s.evPillTextDone]}>{e.title}</Text>
+                    </TouchableOpacity>
                   ))}
                 </View>
               )}
@@ -241,8 +250,9 @@ const s = StyleSheet.create({
   addHint: { color: colors.textFaint, fontFamily: FF.light, fontSize: 11 },
 
   evRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2, marginBottom: 2 },
-  evPill: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.primaryLight },
+  evPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.primaryLight },
   evPillText: { color: colors.text, fontFamily: FF.medium, fontSize: 11 },
+  evPillTextDone: { textDecorationLine: 'line-through', color: colors.textMid },
 
   // ── Activity line ──
   actLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 3 },

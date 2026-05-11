@@ -80,9 +80,9 @@ export default function WeekIntakeScreen({ route, navigation }) {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[s.body, { paddingBottom: bottomPad + 100 }]} keyboardShouldPersistTaps="handled">
-          <Text style={s.lead}>Tell us what's happening this week. Say it out loud or write it — anything goes.</Text>
+          <Text style={s.lead}>What's the week looking like? Say it out loud or type it — anything goes.</Text>
           <Text style={s.example}>
-            e.g. "Monday cycling with Ollie at 8am, office afternoon. Tuesday rowing AM, lawyer chat at 3. Wednesday dinner with Josh and Bep. Friday date night — Wimbledon Art Fair. Saturday we fly to Spain at 6:30pm."
+            Mention days as you go. Times if you've got them. We'll lay it out for you.
           </Text>
 
           <View style={s.inputWrap}>
