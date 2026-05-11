@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "iita",
+    "slug": "iita",
+    "scheme": "iita",
+    "version": "0.1.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.iita.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "1"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.iita.app",
+      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "name": "iita",
+      "shortName": "iita",
+      "description": "Plan the week together",
+      "themeColor": "#F6237D",
+      "backgroundColor": "#000000"
+    },
+    "plugins": [
+      "expo-web-browser",
+      "expo-font",
+      "expo-apple-authentication",
+      "expo-secure-store",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "iita uses the microphone so you can dictate the week instead of typing.",
+          "speechRecognitionPermission": "iita uses on-device speech recognition to turn what you say into text. Audio stays on your phone."
+        }
+      ],
+      "expo-audio",
+      "expo-asset"
+    ],
+    "extra": {
+      "serverUrl": ""
+    }
+  }
+}
