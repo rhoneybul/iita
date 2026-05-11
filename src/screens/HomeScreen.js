@@ -4,20 +4,23 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActionSheetIOS, Platform, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Platform, ActionSheetIOS, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, fontFamily, spacing, radius, layout, useBottomInset } from '../theme';
-import { getWeek, WEEKDAYS, emptyDay, getEvents } from '../services/storageService';
+import { colors, fontFamily, spacing, radius, layout } from '../theme';
+import { getWeek, WEEKDAYS, emptyDay, getEvents, getList, saveListItem } from '../services/storageService';
 import {
   isoWeekStart, shiftWeek, weekRangeLabel, fromISODate, addDays,
   toISODate, WEEKDAYS_LONG,
 } from '../utils/dates';
 import { sortActivities } from '../utils/time';
 import { labelOf } from '../data/labels';
+import BottomNav from '../components/BottomNav';
+import IitaMark from '../components/IitaMark';
 
 const FF = fontFamily;
 
@@ -25,13 +28,19 @@ export default function HomeScreen({ navigation }) {
   const [weekStart, setWeekStart] = useState(isoWeekStart(new Date()));
   const [week, setWeek] = useState(null);
   const [events, setEvents] = useState([]);
-  const bottomPad = useBottomInset(spacing.xxxl);
+  const [todos, setTodos] = useState([]);
 
   const load = useCallback(async () => {
-    const [w, e] = await Promise.all([getWeek(weekStart), getEvents()]);
+    const [w, e, t] = await Promise.all([getWeek(weekStart), getEvents(), getList('todo')]);
     setWeek(w);
     setEvents(e);
+    setTodos(t);
   }, [weekStart]);
+
+  async function toggleTodo(item) {
+    await saveListItem('todo', { ...item, done: !item.done });
+    load();
+  }
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -59,9 +68,12 @@ export default function HomeScreen({ navigation }) {
     return m;
   }, [events]);
 
-  function openOverflow() {
-    const labels = ['To-do', 'Wish list', 'Year view', 'Settings'];
-    const routes = ['Todo',  'Wishlist',  'Year',      'Settings'];
+  const todayISO = toISODate(new Date());
+  const onCurrentWeek = weekStart === isoWeekStart(new Date());
+
+  function openMore() {
+    const labels = ['To-do', 'Wish list', 'Settings'];
+    const routes = ['Todo',  'Wishlist',  'Settings'];
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         { options: [...labels, 'Cancel'], cancelButtonIndex: labels.length, userInterfaceStyle: 'dark' },
@@ -75,11 +87,21 @@ export default function HomeScreen({ navigation }) {
     }
   }
 
-  const todayISO = toISODate(new Date());
-  const onCurrentWeek = weekStart === isoWeekStart(new Date());
-
   return (
     <SafeAreaView style={s.root} edges={['top']}>
+      <View style={s.brandBar}>
+        <View style={s.brandLeft}>
+          <IitaMark size={32} idSuffix="home" />
+          <View>
+            <Text style={s.wordmark}>iita</Text>
+            <Text style={s.tagline}>Plan the week together</Text>
+          </View>
+        </View>
+        <TouchableOpacity onPress={openMore} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Ionicons name="ellipsis-horizontal" size={22} color={colors.textMid} />
+        </TouchableOpacity>
+      </View>
+
       <View style={s.header}>
         <TouchableOpacity onPress={() => setWeekStart(w => shiftWeek(w, -1))} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="chevron-back" size={22} color={colors.textMid} />
@@ -90,31 +112,73 @@ export default function HomeScreen({ navigation }) {
           {!onCurrentWeek && <Text style={s.headerJump}>Tap for this week</Text>}
         </TouchableOpacity>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
-          <TouchableOpacity onPress={() => setWeekStart(w => shiftWeek(w, 1))} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons name="chevron-forward" size={22} color={colors.textMid} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={openOverflow} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons name="ellipsis-horizontal" size={22} color={colors.textMid} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={() => setWeekStart(w => shiftWeek(w, 1))} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Ionicons name="chevron-forward" size={22} color={colors.textMid} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={[s.body, { paddingBottom: bottomPad + 60 }]}>
-        <TouchableOpacity
-          style={isEmpty ? s.ctaPrimary : s.ctaSubtle}
-          onPress={() => navigation.navigate('WeekIntake', { weekStart })}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="mic" size={isEmpty ? 18 : 14} color={isEmpty ? '#000' : colors.primary} />
-          <Text style={isEmpty ? s.ctaPrimaryLabel : s.ctaSubtleLabel}>
-            {isEmpty ? 'Plan the week' : 'Dictate or rewrite the week'}
-          </Text>
-        </TouchableOpacity>
-
+      <ScrollView contentContainerStyle={[s.body, { paddingBottom: spacing.xl }]}>
         {isEmpty && (
-          <Text style={s.ctaHint}>Dictate or type — Claude lays it out by day.</Text>
+          <>
+            <TouchableOpacity
+              style={s.ctaPrimary}
+              onPress={() => navigation.navigate('WeekIntake', { weekStart })}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="mic" size={18} color="#000" />
+              <Text style={s.ctaPrimaryLabel}>Plan the week</Text>
+            </TouchableOpacity>
+            <Text style={s.ctaHint}>Dictate or type — Claude lays it out by day.</Text>
+          </>
         )}
+
+        {/* To-do peek — top 3 open items, tap circle to toggle, header
+            navigates to the full list. Hides entirely when nothing is
+            open so it never wastes space. */}
+        {(() => {
+          const openTodos = todos.filter(t => !t.done);
+          if (openTodos.length === 0) return null;
+          const preview = openTodos.slice(0, 3);
+          const more = openTodos.length - preview.length;
+          return (
+            <View style={s.todoCard}>
+              <TouchableOpacity
+                style={s.todoHead}
+                onPress={() => navigation.navigate('Todo')}
+                activeOpacity={0.7}
+              >
+                <View style={s.todoHeadLeft}>
+                  <Ionicons name="list-outline" size={14} color={colors.primary} />
+                  <Text style={s.todoTitle}>To-do</Text>
+                  <View style={s.todoBadge}>
+                    <Text style={s.todoBadgeText}>{openTodos.length}</Text>
+                  </View>
+                </View>
+                <View style={s.todoHeadRight}>
+                  <Text style={s.todoViewAll}>View all</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+                </View>
+              </TouchableOpacity>
+              {preview.map(item => (
+                <View key={item.id} style={s.todoLine}>
+                  <TouchableOpacity
+                    onPress={() => toggleTodo(item)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="ellipse-outline" size={20} color={colors.textMuted} />
+                  </TouchableOpacity>
+                  <Text style={s.todoText} numberOfLines={1}>{item.title}</Text>
+                </View>
+              ))}
+              {more > 0 && (
+                <TouchableOpacity onPress={() => navigation.navigate('Todo')} activeOpacity={0.6}>
+                  <Text style={s.todoMore}>+ {more} more</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })()}
 
         {WEEKDAYS.map((dayKey, idx) => {
           const day = week?.days?.[dayKey] || emptyDay();
@@ -126,18 +190,18 @@ export default function HomeScreen({ navigation }) {
           const acts = sortActivities(day.activities || []);
           const isDayEmpty = acts.length === 0 && dayEvents.length === 0;
 
+          const openDay = () => navigation.navigate('DayDetail', { weekStart, day: dayKey });
+
           return (
-            <TouchableOpacity
+            <View
               key={dayKey}
               style={[
                 isDayEmpty ? s.dayRowEmpty : s.dayRow,
                 isToday && (isDayEmpty ? s.dayRowEmptyToday : s.dayRowToday),
                 isPast && !isToday && s.dayRowPast,
               ]}
-              onPress={() => navigation.navigate('DayDetail', { weekStart, day: dayKey })}
-              activeOpacity={0.7}
             >
-              <View style={s.dayHead}>
+              <TouchableOpacity onPress={openDay} activeOpacity={0.7} style={s.dayHead}>
                 <Text style={[
                   s.dayName,
                   isToday && { color: colors.primary },
@@ -147,7 +211,7 @@ export default function HomeScreen({ navigation }) {
                 </Text>
                 {isToday && <Text style={s.todayBadge}>TODAY</Text>}
                 {isDayEmpty && !isToday && <Text style={s.addHint}>tap to add</Text>}
-              </View>
+              </TouchableOpacity>
 
               {dayEvents.length > 0 && (
                 <View style={s.evRow}>
@@ -172,7 +236,7 @@ export default function HomeScreen({ navigation }) {
               {acts.map(a => {
                 const lbl = labelOf(a.label);
                 return (
-                  <View key={a.id} style={s.actLine}>
+                  <TouchableOpacity key={a.id} style={s.actLine} onPress={openDay} activeOpacity={0.7}>
                     <View style={s.actTimeCol}>
                       {a.time ? (
                         <Text style={s.actTime}>{a.time}</Text>
@@ -189,19 +253,32 @@ export default function HomeScreen({ navigation }) {
                         </View>
                       )}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
-            </TouchableOpacity>
+            </View>
           );
         })}
       </ScrollView>
+
+      <BottomNav navigation={navigation} current="week" weekStart={weekStart} />
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+
+  brandBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.md,
+  },
+  brandLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  wordmark: {
+    fontSize: 28, color: colors.primary, fontFamily: FF.semibold,
+    letterSpacing: 1.5, lineHeight: 32,
+  },
+  tagline: { color: colors.textMuted, fontFamily: FF.light, fontSize: 11, marginTop: 1 },
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 16, textAlign: 'center' },
@@ -224,6 +301,26 @@ const s = StyleSheet.create({
   },
   ctaSubtleLabel: { color: colors.textMid, fontFamily: FF.medium, fontSize: 13 },
   ctaHint: { color: colors.textMuted, fontFamily: FF.light, fontSize: 13, textAlign: 'center', marginBottom: spacing.lg, lineHeight: 18 },
+
+  // ── To-do peek ──
+  todoCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
+    marginBottom: spacing.xs,
+    gap: 6,
+  },
+  todoHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  todoHeadLeft:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  todoHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 1 },
+  todoTitle:    { color: colors.text, fontFamily: FF.semibold, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8 },
+  todoBadge:    { backgroundColor: colors.primaryLight, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, marginLeft: 2 },
+  todoBadgeText:{ color: colors.primary, fontFamily: FF.semibold, fontSize: 10 },
+  todoViewAll:  { color: colors.textMuted, fontFamily: FF.medium, fontSize: 11 },
+  todoLine:     { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 4 },
+  todoText:     { flex: 1, color: colors.text, fontFamily: FF.regular, fontSize: 14, lineHeight: 18 },
+  todoMore:     { color: colors.textMuted, fontFamily: FF.light, fontSize: 12, paddingTop: 4 },
 
   dayRow: {
     paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
