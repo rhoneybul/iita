@@ -10,7 +10,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fontFamily, spacing, radius, layout } from '../theme';
 import { getList, saveListItem, deleteListItem } from '../services/storageService';
 import { LABELS, LABEL_ORDER } from '../data/labels';
+import { api } from '../services/api';
 import Drawer from '../components/Drawer';
+
+function firstNameOf(m) {
+  const raw = (m?.name || m?.email || '').trim();
+  if (!raw) return '';
+  return raw.split(/[\s@.]/)[0] || raw;
+}
 
 const FF = fontFamily;
 
@@ -18,10 +25,12 @@ export default function ListItemEditScreen({ route, navigation }) {
   const { kind = 'todo', itemId } = route.params || {};
   const isEdit = !!itemId;
 
-  const [title, setTitle] = useState('');
-  const [notes, setNotes] = useState('');
-  const [label, setLabel] = useState('');
-  const [done, setDone]   = useState(false);
+  const [title, setTitle]       = useState('');
+  const [notes, setNotes]       = useState('');
+  const [label, setLabel]       = useState('');
+  const [assigned, setAssigned] = useState(null);
+  const [done, setDone]         = useState(false);
+  const [members, setMembers]   = useState([]);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -32,10 +41,16 @@ export default function ListItemEditScreen({ route, navigation }) {
         setTitle(item.title || '');
         setNotes(item.notes || '');
         setLabel(item.label || '');
+        setAssigned(item.assigned_to || null);
         setDone(!!item.done);
       }
     })();
   }, [isEdit, kind, itemId]);
+
+  useEffect(() => {
+    if (!api.enabled) return;
+    api.pair.get().then(p => setMembers(p?.members || [])).catch(() => {});
+  }, []);
 
   const canSave = title.trim().length > 0;
 
@@ -46,6 +61,7 @@ export default function ListItemEditScreen({ route, navigation }) {
       title: title.trim(),
       notes: notes.trim() || null,
       label: label || null,
+      assigned_to: assigned || null,
       done,
     });
     navigation.goBack();
@@ -117,6 +133,36 @@ export default function ListItemEditScreen({ route, navigation }) {
             })}
           </View>
         </View>
+
+        {members.length > 0 && (
+          <View style={s.field}>
+            <Text style={s.fieldLabel}>Who's on it? <Text style={s.fieldHint}>optional</Text></Text>
+            <View style={s.chipRow}>
+              <TouchableOpacity
+                onPress={() => setAssigned(null)}
+                activeOpacity={0.8}
+                style={[s.chip, { borderColor: colors.textMuted }, !assigned && { backgroundColor: colors.textMuted }]}
+              >
+                <Text style={[s.chipText, { color: !assigned ? '#000' : colors.textMuted }]}>Either</Text>
+              </TouchableOpacity>
+              {members.map(m => {
+                const active = assigned === m.user_id;
+                const name = firstNameOf(m) || 'Member';
+                const display = m.is_self ? `${name} (me)` : name;
+                return (
+                  <TouchableOpacity
+                    key={m.user_id}
+                    onPress={() => setAssigned(active ? null : m.user_id)}
+                    activeOpacity={0.8}
+                    style={[s.chip, { borderColor: colors.primary }, active && { backgroundColor: colors.primary }]}
+                  >
+                    <Text style={[s.chipText, { color: active ? '#000' : colors.primary }]}>{display}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {isEdit && (
           <TouchableOpacity style={s.deleteBtn} onPress={remove} activeOpacity={0.7}>

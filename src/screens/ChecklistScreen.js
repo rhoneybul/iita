@@ -3,7 +3,7 @@
 // title, the input placeholder, and the section heading for done items
 // ("Done" vs. "We did it"). Reached from the home-screen overflow menu.
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   KeyboardAvoidingView, Platform, ActionSheetIOS, Alert,
@@ -15,8 +15,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fontFamily, spacing, radius, useBottomInset } from '../theme';
 import { getList, saveListItem, deleteListItem } from '../services/storageService';
 import { labelOf } from '../data/labels';
+import { api } from '../services/api';
 
 const FF = fontFamily;
+
+function firstNameOf(m) {
+  const raw = (m?.name || m?.email || '').trim();
+  if (!raw) return '';
+  return raw.split(/[\s@.]/)[0] || raw;
+}
 
 // One screen, two configurations. The "wish" copy is gentler/celebratory;
 // "todo" is utilitarian.
@@ -41,9 +48,10 @@ export default function ChecklistScreen({ navigation, route }) {
   const kind = route.params?.kind || 'todo';
   const cfg = CONFIG[kind] || CONFIG.todo;
 
-  const [items, setItems] = useState([]);
-  const [input, setInput] = useState('');
-  const [busy, setBusy]   = useState(false);
+  const [items, setItems]     = useState([]);
+  const [input, setInput]     = useState('');
+  const [busy, setBusy]       = useState(false);
+  const [members, setMembers] = useState([]);
   const inputRef = useRef(null);
   const bottomPad = useBottomInset(spacing.lg);
 
@@ -52,6 +60,17 @@ export default function ChecklistScreen({ navigation, route }) {
   }, [kind]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  useEffect(() => {
+    if (!api.enabled) return;
+    api.pair.get().then(p => setMembers(p?.members || [])).catch(() => {});
+  }, []);
+
+  const memberById = React.useMemo(() => {
+    const map = {};
+    for (const m of members) map[m.user_id] = m;
+    return map;
+  }, [members]);
 
   async function handleAdd() {
     const text = input.trim();
@@ -157,6 +176,7 @@ export default function ChecklistScreen({ navigation, route }) {
             <Row
               key={item.id}
               item={item}
+              assignee={item.assigned_to ? memberById[item.assigned_to] : null}
               onToggle={() => toggle(item)}
               onOpen={() => navigation.navigate('ListItemEdit', { kind, itemId: item.id })}
               onLongPress={() => confirmDelete(item)}
@@ -172,6 +192,7 @@ export default function ChecklistScreen({ navigation, route }) {
                 <Row
                   key={item.id}
                   item={item}
+                  assignee={item.assigned_to ? memberById[item.assigned_to] : null}
                   onToggle={() => toggle(item)}
                   onOpen={() => navigation.navigate('ListItemEdit', { kind, itemId: item.id })}
                   onLongPress={() => confirmDelete(item)}
@@ -185,8 +206,10 @@ export default function ChecklistScreen({ navigation, route }) {
   );
 }
 
-function Row({ item, onToggle, onOpen, onLongPress }) {
+function Row({ item, assignee, onToggle, onOpen, onLongPress }) {
   const lbl = labelOf(item.label);
+  const assigneeName = assignee ? firstNameOf(assignee) : '';
+  const initial = assigneeName ? assigneeName.charAt(0).toUpperCase() : '';
   return (
     <View style={[s.row, item.done && s.rowDone]}>
       <TouchableOpacity
@@ -212,6 +235,11 @@ function Row({ item, onToggle, onOpen, onLongPress }) {
           <Text style={[s.rowNotes, item.done && s.rowTextDone]} numberOfLines={1}>{item.notes}</Text>
         ) : null}
       </TouchableOpacity>
+      {initial ? (
+        <View style={s.avatar}>
+          <Text style={s.avatarText}>{initial}</Text>
+        </View>
+      ) : null}
       {lbl && (
         <View style={[s.chip, { backgroundColor: lbl.bg }]}>
           <Text style={[s.chipText, { color: lbl.color }]}>{lbl.name}</Text>
@@ -256,6 +284,8 @@ const s = StyleSheet.create({
   rowTextDone: { textDecorationLine: 'line-through', color: colors.textMuted },
   chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   chipText: { fontFamily: FF.medium, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 },
+  avatar: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surfaceLight, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: colors.text, fontFamily: FF.semibold, fontSize: 11 },
 
   sectionLabel: { color: colors.textMuted, fontFamily: FF.medium, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.lg, marginBottom: spacing.sm },
 

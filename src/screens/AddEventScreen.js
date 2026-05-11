@@ -24,18 +24,18 @@ export default function AddEventScreen({ route, navigation }) {
   const initialYear = route.params?.year || new Date().getFullYear();
   const isEdit = !!eventId;
 
+  const todayInYear = new Date(initialYear, new Date().getMonth(), new Date().getDate());
   const [title, setTitle]       = useState('');
-  const [date, setDate]         = useState(new Date(initialYear, new Date().getMonth(), new Date().getDate()));
-  const [hasEnd, setHasEnd]     = useState(false);
-  const [endDate, setEndDate]   = useState(new Date(initialYear, new Date().getMonth(), new Date().getDate()));
+  const [date, setDate]         = useState(todayInYear);
+  const [endDate, setEndDate]   = useState(todayInYear);
   const [time, setTime]         = useState('');
   const [withWho, setWithWho]   = useState('');
   const [location, setLocation] = useState('');
   const [label, setLabel]       = useState('');
   const [notes, setNotes]       = useState('');
   const [done, setDone]         = useState(false);
-  const [showStart, setShowStart] = useState(Platform.OS === 'ios');
-  const [showEnd,   setShowEnd]   = useState(Platform.OS === 'ios');
+  const [showStart, setShowStart] = useState(false);
+  const [showEnd,   setShowEnd]   = useState(false);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -45,10 +45,10 @@ export default function AddEventScreen({ route, navigation }) {
       if (!e) return;
       setTitle(e.title || '');
       const start = fromISODate(e.date);
-      if (start) setDate(start);
+      if (start) { setDate(start); setEndDate(start); }
       if (e.endDate) {
         const end = fromISODate(e.endDate);
-        if (end) { setEndDate(end); setHasEnd(true); }
+        if (end) setEndDate(end);
       }
       setTime(e.time || '');
       setWithWho(e.withWho || '');
@@ -63,11 +63,13 @@ export default function AddEventScreen({ route, navigation }) {
 
   async function save() {
     if (!canSave) return;
+    const startISO = toISODate(date);
+    const endISO   = toISODate(endDate);
     await saveEvent({
       id: eventId || undefined,
       title: title.trim(),
-      date: toISODate(date),
-      endDate: hasEnd ? toISODate(endDate) : undefined,
+      date: startISO,
+      endDate: endISO !== startISO ? endISO : undefined,
       time: (time || '').trim() || undefined,
       withWho: withWho.trim() || undefined,
       location: location.trim() || undefined,
@@ -76,6 +78,16 @@ export default function AddEventScreen({ route, navigation }) {
       done,
     });
     navigation.goBack();
+  }
+
+  function handleStartChange(d) {
+    setDate(d);
+    if (endDate < d) setEndDate(d);
+  }
+
+  function handleEndChange(d) {
+    if (d < date) { setEndDate(date); return; }
+    setEndDate(d);
   }
 
   async function remove() {
@@ -109,51 +121,60 @@ export default function AddEventScreen({ route, navigation }) {
         </View>
 
         <View style={s.field}>
-          <Text style={s.fieldLabel}>When</Text>
-          {Platform.OS === 'android' ? (
-            <TouchableOpacity onPress={() => setShowStart(true)} style={s.dateBtn}>
-              <Text style={s.dateBtnText}>{fmt(date)}</Text>
-            </TouchableOpacity>
-          ) : null}
-          {showStart && (
+          <View style={s.dateRow}>
+            <Text style={s.dateRowLabel}>Starts</Text>
+            {Platform.OS === 'ios' ? (
+              <DateTimePicker
+                value={date}
+                mode="date"
+                display="compact"
+                onChange={(_, d) => { if (d) handleStartChange(d); }}
+                themeVariant="dark"
+              />
+            ) : (
+              <TouchableOpacity onPress={() => setShowStart(true)} style={s.dateBtn}>
+                <Text style={s.dateBtnText}>{fmt(date)}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {Platform.OS === 'android' && showStart && (
             <DateTimePicker
               value={date}
               mode="date"
               onChange={(_, d) => {
-                if (Platform.OS === 'android') setShowStart(false);
-                if (d) setDate(d);
+                setShowStart(false);
+                if (d) handleStartChange(d);
               }}
-              themeVariant="dark"
             />
           )}
-        </View>
 
-        <View style={s.field}>
-          <TouchableOpacity onPress={() => setHasEnd(v => !v)} style={s.toggleRow} activeOpacity={0.7}>
-            <View style={[s.checkbox, hasEnd && s.checkboxOn]}>
-              {hasEnd && <Ionicons name="checkmark" size={14} color="#000" />}
-            </View>
-            <Text style={s.toggleLabel}>This spans more than one day</Text>
-          </TouchableOpacity>
-          {hasEnd && (
-            <View style={{ marginTop: spacing.md }}>
-              {Platform.OS === 'android' ? (
-                <TouchableOpacity onPress={() => setShowEnd(true)} style={s.dateBtn}>
-                  <Text style={s.dateBtnText}>Until {fmt(endDate)}</Text>
-                </TouchableOpacity>
-              ) : null}
-              {showEnd && (
-                <DateTimePicker
-                  value={endDate}
-                  mode="date"
-                  onChange={(_, d) => {
-                    if (Platform.OS === 'android') setShowEnd(false);
-                    if (d) setEndDate(d);
-                  }}
-                  themeVariant="dark"
-                />
-              )}
-            </View>
+          <View style={[s.dateRow, s.dateRowBottom]}>
+            <Text style={s.dateRowLabel}>Ends</Text>
+            {Platform.OS === 'ios' ? (
+              <DateTimePicker
+                value={endDate}
+                mode="date"
+                display="compact"
+                minimumDate={date}
+                onChange={(_, d) => { if (d) handleEndChange(d); }}
+                themeVariant="dark"
+              />
+            ) : (
+              <TouchableOpacity onPress={() => setShowEnd(true)} style={s.dateBtn}>
+                <Text style={s.dateBtnText}>{fmt(endDate)}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {Platform.OS === 'android' && showEnd && (
+            <DateTimePicker
+              value={endDate}
+              mode="date"
+              minimumDate={date}
+              onChange={(_, d) => {
+                setShowEnd(false);
+                if (d) handleEndChange(d);
+              }}
+            />
           )}
         </View>
 
@@ -270,12 +291,20 @@ const s = StyleSheet.create({
   dateBtn: { paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceLight },
   dateBtnText: { color: colors.text, fontFamily: FF.medium, fontSize: 14 },
 
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dateRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    minHeight: 36,
+  },
+  dateRowBottom: {
+    borderTopWidth: 1, borderTopColor: colors.border,
+    marginTop: spacing.md, paddingTop: spacing.md,
+  },
+  dateRowLabel: { color: colors.text, fontFamily: FF.semibold, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.6 },
+
   toggleField: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   toggleHint: { color: colors.textMuted, fontFamily: FF.light, fontSize: 12, marginTop: 2 },
   checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  toggleLabel: { color: colors.text, fontFamily: FF.regular, fontSize: 14 },
 
   deleteBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
