@@ -1,17 +1,16 @@
 // Generate an invite code and share it. Polls /pair every 4s while the
 // screen is open so we can show the success state as soon as the
-// partner redeems.
+// partner redeems. Renders as a drawer.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  Share, Alert, Platform,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Share,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, fontFamily, spacing, radius, layout, useBottomInset } from '../theme';
+import { colors, fontFamily, spacing, radius, layout } from '../theme';
 import { api } from '../services/api';
+import Drawer from '../components/Drawer';
 
 const FF = fontFamily;
 const POLL_MS = 4000;
@@ -21,10 +20,8 @@ export default function InvitePartnerScreen({ navigation }) {
   const [code, setCode]       = useState(null);
   const [expiresAt, setExp]   = useState(null);
   const [error, setError]     = useState(null);
-  const [partner, setPartner] = useState(null);  // set when partner joins
+  const [partner, setPartner] = useState(null);
   const pollRef = useRef(null);
-
-  const bottomPad = useBottomInset(spacing.xl);
 
   const generate = useCallback(async () => {
     setBusy(true); setError(null);
@@ -34,18 +31,14 @@ export default function InvitePartnerScreen({ navigation }) {
       setCode(r.code);
       setExp(r.expires_at);
     } catch (e) {
-      const msg = parseApiError(e);
-      setError(msg);
+      setError(parseApiError(e));
     } finally {
       setBusy(false);
     }
   }, []);
 
-  // First mount: try to generate immediately. If the pair is already
-  // full, surface that and let the user back out.
   useEffect(() => { generate(); }, [generate]);
 
-  // Poll for partner-joined while the code is live.
   useEffect(() => {
     if (!code || partner) return;
     pollRef.current = setInterval(async () => {
@@ -69,16 +62,9 @@ export default function InvitePartnerScreen({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={s.root} edges={['top']}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="close" size={22} color={colors.textMid} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Invite your partner</Text>
-        <View style={{ width: 22 }} />
-      </View>
-
-      <View style={[s.body, { paddingBottom: bottomPad }]}>
+    <Drawer onClose={() => navigation.goBack()}>
+      <Drawer.Header title="Invite your partner" onClose={() => navigation.goBack()} />
+      <Drawer.Body>
         {busy && !code ? (
           <View style={s.center}>
             <ActivityIndicator color={colors.primary} />
@@ -129,8 +115,8 @@ export default function InvitePartnerScreen({ navigation }) {
             </Text>
           </>
         )}
-      </View>
-    </SafeAreaView>
+      </Drawer.Body>
+    </Drawer>
   );
 }
 
@@ -153,12 +139,7 @@ function fmtExpires(iso) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 16 },
-
-  body: { flex: 1, padding: spacing.xl, gap: spacing.lg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
+  center: { alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.xl },
   subtle: { color: colors.textMuted, fontFamily: FF.light, fontSize: 13 },
 
   lead: { color: colors.text, fontFamily: FF.regular, fontSize: 16, lineHeight: 22, textAlign: 'center' },
@@ -178,7 +159,7 @@ const s = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, justifyContent: 'center', marginTop: spacing.md },
   statusText: { color: colors.textMuted, fontFamily: FF.light, fontSize: 13 },
 
-  fine: { color: colors.textFaint, fontFamily: FF.light, fontSize: 11, lineHeight: 16, textAlign: 'center', paddingHorizontal: spacing.xl, marginTop: 'auto' },
+  fine: { color: colors.textFaint, fontFamily: FF.light, fontSize: 11, lineHeight: 16, textAlign: 'center', paddingHorizontal: spacing.xl },
 
   errorTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 16 },
   errorBody:  { color: colors.textMid, fontFamily: FF.regular, fontSize: 13, textAlign: 'center', lineHeight: 19 },

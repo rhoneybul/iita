@@ -121,6 +121,16 @@ const slideUp = ({ current, layouts }) => ({
   },
 });
 
+// Shared options for every drawer-presented route. Transparent card so
+// the previous screen shows behind the sheet; overlay enabled for the
+// dark backdrop; vertical gesture to dismiss.
+const drawerOptions = {
+  gestureDirection: 'vertical',
+  cardStyleInterpolator: slideUp,
+  cardStyle: { backgroundColor: 'transparent' },
+  cardOverlayEnabled: true,
+};
+
 function App() {
   const [initialRoute, setInitialRoute] = useState(null);
   const navigationRef = React.useRef(null);
@@ -252,35 +262,30 @@ function App() {
                 <Stack.Screen
                   name="WeekIntake"
                   component={WeekIntakeScreen}
-                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                  options={drawerOptions}
                 />
                 <Stack.Screen name="DayDetail"   component={DayDetailScreen} />
                 <Stack.Screen
                   name="ActivityEdit"
                   component={ActivityEditScreen}
-                  options={{
-                    gestureDirection: 'vertical',
-                    cardStyleInterpolator: slideUp,
-                    cardStyle: { backgroundColor: 'transparent' },
-                    cardOverlayEnabled: true,
-                  }}
+                  options={drawerOptions}
                 />
                 <Stack.Screen name="Year"        component={YearScreen} />
                 <Stack.Screen
                   name="AddEvent"
                   component={AddEventScreen}
-                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                  options={drawerOptions}
                 />
                 <Stack.Screen name="Settings"    component={SettingsScreen} />
                 <Stack.Screen
                   name="InvitePartner"
                   component={InvitePartnerScreen}
-                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                  options={drawerOptions}
                 />
                 <Stack.Screen
                   name="JoinPair"
                   component={JoinPairScreen}
-                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                  options={drawerOptions}
                 />
                 <Stack.Screen
                   name="Todo"
@@ -295,12 +300,12 @@ function App() {
                 <Stack.Screen
                   name="GeneralAdd"
                   component={GeneralAddScreen}
-                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                  options={drawerOptions}
                 />
                 <Stack.Screen
                   name="ListItemEdit"
                   component={ListItemEditScreen}
-                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                  options={drawerOptions}
                 />
               </Stack.Navigator>
             </NavigationContainer>

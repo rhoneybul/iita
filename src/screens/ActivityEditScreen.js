@@ -11,9 +11,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fontFamily, spacing, radius, useBottomInset } from '../theme';
-import { getWeek, saveActivity, deleteActivity, emptyDay } from '../services/storageService';
-import { dayLabel } from '../utils/dates';
+import { getWeek, saveActivity, deleteActivity, moveActivity, emptyDay, WEEKDAYS } from '../services/storageService';
+import { dayLabel, fromISODate, addDays, WEEKDAYS_LONG } from '../utils/dates';
 import { LABELS, LABEL_ORDER } from '../data/labels';
+import TimePicker from '../components/TimePicker';
 
 const FF = fontFamily;
 const HIT = { top: 12, bottom: 12, left: 12, right: 12 };
@@ -27,6 +28,7 @@ export default function ActivityEditScreen({ route, navigation }) {
   const [label, setLabel]       = useState('');
   const [notes, setNotes]       = useState('');
   const [together, setTogether] = useState(false);
+  const [dayKey, setDayKey]     = useState(day);
   const [loaded, setLoaded]     = useState(!isEdit);
 
   const bottomPad = useBottomInset(spacing.lg);
@@ -53,14 +55,18 @@ export default function ActivityEditScreen({ route, navigation }) {
 
   async function save() {
     if (!canSave) return;
-    await saveActivity(weekStart, day, {
-      id: activityId || undefined,
+    const patch = {
       title: title.trim(),
-      time: time.trim(),
+      time: (time || '').trim(),
       label,
       notes: notes.trim() || null,
       together,
-    });
+    };
+    if (isEdit && dayKey !== day) {
+      await moveActivity(weekStart, day, dayKey, activityId, patch);
+    } else {
+      await saveActivity(weekStart, dayKey, { id: activityId || undefined, ...patch });
+    }
     navigation.goBack();
   }
 
@@ -93,7 +99,7 @@ export default function ActivityEditScreen({ route, navigation }) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <Text style={s.dayLine}>{dayLabel(weekStart, day)}</Text>
+            <Text style={s.dayLine}>{dayLabel(weekStart, dayKey)}</Text>
 
             <View style={s.field}>
               <Text style={s.fieldLabel}>What is it?</Text>
@@ -109,16 +115,30 @@ export default function ActivityEditScreen({ route, navigation }) {
             </View>
 
             <View style={s.field}>
+              <Text style={s.fieldLabel}>Day</Text>
+              <View style={s.dayRow}>
+                {WEEKDAYS.map(k => {
+                  const active = dayKey === k;
+                  const idx = WEEKDAYS.indexOf(k);
+                  const d = addDays(fromISODate(weekStart), idx);
+                  return (
+                    <TouchableOpacity
+                      key={k}
+                      onPress={() => setDayKey(k)}
+                      activeOpacity={0.8}
+                      style={[s.dayPill, active && s.dayPillActive]}
+                    >
+                      <Text style={[s.dayPillTop, active && s.dayPillTopActive]}>{k}</Text>
+                      <Text style={[s.dayPillNum, active && s.dayPillNumActive]}>{d.getDate()}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={s.field}>
               <Text style={s.fieldLabel}>Time  <Text style={s.fieldHint}>optional</Text></Text>
-              <TextInput
-                style={s.input}
-                value={time}
-                onChangeText={setTime}
-                placeholder="9am · 18:30 · evening"
-                placeholderTextColor={colors.textFaint}
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
+              <TimePicker value={time} onChange={setTime} />
             </View>
 
             <View style={s.field}>
@@ -135,10 +155,10 @@ export default function ActivityEditScreen({ route, navigation }) {
                       style={[
                         s.chip,
                         { borderColor: cfg.color },
-                        active && { backgroundColor: cfg.bg },
+                        active && { backgroundColor: cfg.color },
                       ]}
                     >
-                      <Text style={[s.chipText, { color: cfg.color }]}>{cfg.name}</Text>
+                      <Text style={[s.chipText, { color: active ? '#000' : cfg.color }]}>{cfg.name}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -244,6 +264,18 @@ const s = StyleSheet.create({
     borderRadius: radius.pill, borderWidth: 1,
   },
   chipText: { fontFamily: FF.semibold, fontSize: 12, letterSpacing: 0.3 },
+
+  dayRow: { flexDirection: 'row', gap: 4 },
+  dayPill: {
+    flex: 1, paddingVertical: 8,
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surfaceLight, alignItems: 'center',
+  },
+  dayPillActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  dayPillTop: { color: colors.textMuted, fontFamily: FF.medium, fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase' },
+  dayPillTopActive: { color: colors.primary },
+  dayPillNum: { color: colors.text, fontFamily: FF.semibold, fontSize: 14, marginTop: 1 },
+  dayPillNumActive: { color: colors.primary },
 
   toggleField: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   toggleHint: { color: colors.textMuted, fontFamily: FF.light, fontSize: 12, marginTop: 2, textTransform: 'none', letterSpacing: 0 },

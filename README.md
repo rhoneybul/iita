@@ -5,13 +5,13 @@ A small app for couples to plan the week together. Two views:
 - **Week** — one row per day with six columns (Donde · Juntos · Oficina · Importante · Ejercicio · Que mas).
 - **Year** — one-off events laid out by month (weddings, trips, birthdays).
 
-At the start of each week, tap **Plan the week** and either dictate or type what's happening. Claude slots it into the grid.
+At the start of each week, tap **Plan the week** and type what's happening. Claude slots it into the grid; you can edit each item before saving.
 
 ## Stack
 
 - Expo (React Native) — iOS, Android, web
 - Supabase — auth (Google + Apple)
-- Anthropic Claude — parses free-text/voice into the per-day grid
+- Anthropic Claude — parses free-text into the per-day grid
 - AsyncStorage — local-first, works offline. Server sync is optional.
 
 The foundation (auth gate, splash, OTA, fonts, Sentry, theme, gesture root) is lifted from `../etapa` — anything cycling-specific has been removed.
@@ -27,7 +27,7 @@ Then `i` for iOS sim, `a` for Android, `w` for web.
 
 ### Without any API keys
 
-Leave `.env` empty. The app runs in guest mode (no auth) and the voice/text parser falls back to an on-device heuristic. Everything stays in AsyncStorage on the device.
+Leave `.env` empty. The app runs in guest mode (no auth) and the text parser falls back to an on-device heuristic. Everything stays in AsyncStorage on the device.
 
 ### With Claude / Supabase
 
@@ -92,17 +92,16 @@ src/
   components/
     LoadingSplash.js       — throbbing splash for the JS handoff
     WebWrapper.js          — phone-shaped viewport on web
-  hooks/
-    useVoiceTranscription.js — wraps expo-speech-recognition
   utils/
     dates.js               — ISO weeks, formatting
     parseWeek.js           — fallback heuristic parser (no LLM)
+    time.js                — time-string parsing + sort
   data/
     seedEvents.js          — first-run year events
   screens/
     SignInScreen.js
     HomeScreen.js          — week view
-    WeekIntakeScreen.js    — voice/text → Claude → grid
+    WeekIntakeScreen.js    — free-text → Claude → editable grid
     DayDetailScreen.js     — edit one day
     YearScreen.js          — months across the year
     AddEventScreen.js

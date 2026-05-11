@@ -20,8 +20,6 @@
       "bundleIdentifier": "com.rhoneybul.iita",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSSpeechRecognitionUsageDescription": "iita uses on-device speech recognition to turn what you say into text. Audio stays on your phone.",
-        "NSMicrophoneUsageDescription": "iita uses the microphone so you can dictate the week instead of typing.",
         "NSPhotoLibraryUsageDescription": "iita doesn't access your photo library. This string is required by Apple because a bundled framework references the photos API.",
         "NSCameraUsageDescription": "iita doesn't access your camera. This string is required by Apple because a bundled framework references the camera API."
       },
@@ -40,12 +38,7 @@
       "package": "com.rhoneybul.iita",
       "versionCode": 2,
       "softwareKeyboardLayoutMode": "resize",
-      "permissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
-      ]
+      "permissions": []
     },
     "web": {
       "bundler": "metro",
@@ -63,14 +56,6 @@
       "expo-apple-authentication",
       "expo-secure-store",
       "@react-native-community/datetimepicker",
-      [
-        "expo-speech-recognition",
-        {
-          "microphonePermission": "iita uses the microphone so you can dictate the week instead of typing.",
-          "speechRecognitionPermission": "iita uses on-device speech recognition to turn what you say into text. Audio stays on your phone."
-        }
-      ],
-      "expo-audio",
       "expo-asset"
     ],
     "extra": {

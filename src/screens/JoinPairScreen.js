@@ -1,19 +1,18 @@
 // Enter a partner's invite code. On success, wipes the user's existing
 // iita calendar (they're adopting their partner's) and re-hydrates from
-// the server.
+// the server. Renders as a drawer.
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
-  Platform, KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, fontFamily, spacing, radius, layout, useBottomInset } from '../theme';
+import { colors, fontFamily, spacing, radius, layout } from '../theme';
 import { api } from '../services/api';
 import { wipeLocalCalendar, hydrateFromServer } from '../services/storageService';
 import { getSession } from '../services/authService';
+import Drawer from '../components/Drawer';
 
 const FF = fontFamily;
 const CODE_LEN = 6;
@@ -27,13 +26,10 @@ export default function JoinPairScreen({ route, navigation }) {
   const [signedIn, setSignedIn] = useState(true);
   const inputRef = useRef(null);
 
-  const bottomPad = useBottomInset(spacing.xl);
-
   useEffect(() => {
     getSession().then(s => setSignedIn(!!s));
   }, []);
 
-  // Auto-submit when the screen opens from a deep link with a full code.
   useEffect(() => {
     if (presetCode.length === CODE_LEN && signedIn) {
       submit(presetCode);
@@ -46,8 +42,6 @@ export default function JoinPairScreen({ route, navigation }) {
     setBusy(true); setError(null);
     try {
       await api.pair.redeem(c);
-      // Local state belongs to the old pair — wipe it, then pull the
-      // partner's data from the server.
       await wipeLocalCalendar();
       await hydrateFromServer({ force: true });
       navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
@@ -59,71 +53,62 @@ export default function JoinPairScreen({ route, navigation }) {
   }
 
   return (
-    <SafeAreaView style={s.root} edges={['top']}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="close" size={22} color={colors.textMid} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Join your partner</Text>
-        <View style={{ width: 22 }} />
-      </View>
+    <Drawer onClose={() => navigation.goBack()}>
+      <Drawer.Header title="Join your partner" onClose={() => navigation.goBack()} />
+      <Drawer.Body>
+        {!signedIn ? (
+          <View style={s.center}>
+            <Ionicons name="lock-closed-outline" size={36} color={colors.textMuted} />
+            <Text style={s.signinTitle}>Sign in first</Text>
+            <Text style={s.signinBody}>
+              Joining a pair links your account to your partner's. Sign in with the account you want linked, then come back here.
+            </Text>
+            <TouchableOpacity
+              style={s.primaryBtn}
+              onPress={() => navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] })}
+              activeOpacity={0.85}
+            >
+              <Text style={s.primaryLabel}>Go to sign in</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <Text style={s.lead}>Enter the 6-character code your partner sent you.</Text>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[s.body, { paddingBottom: bottomPad }]}>
-          {!signedIn ? (
-            <View style={s.center}>
-              <Ionicons name="lock-closed-outline" size={36} color={colors.textMuted} />
-              <Text style={s.signinTitle}>Sign in first</Text>
-              <Text style={s.signinBody}>
-                Joining a pair links your account to your partner's. Sign in with the account you want linked, then come back here.
-              </Text>
-              <TouchableOpacity
-                style={s.primaryBtn}
-                onPress={() => navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] })}
-                activeOpacity={0.85}
-              >
-                <Text style={s.primaryLabel}>Go to sign in</Text>
-              </TouchableOpacity>
+            <View style={s.codeCard}>
+              <TextInput
+                ref={inputRef}
+                style={s.codeInput}
+                value={code}
+                onChangeText={v => setCode(v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LEN))}
+                placeholder="ABCD23"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                autoFocus={!presetCode}
+                maxLength={CODE_LEN}
+                onSubmitEditing={() => submit()}
+              />
             </View>
-          ) : (
-            <>
-              <Text style={s.lead}>Enter the 6-character code your partner sent you.</Text>
 
-              <View style={s.codeCard}>
-                <TextInput
-                  ref={inputRef}
-                  style={s.codeInput}
-                  value={code}
-                  onChangeText={v => setCode(v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LEN))}
-                  placeholder="ABCD23"
-                  placeholderTextColor={colors.textFaint}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  autoFocus={!presetCode}
-                  maxLength={CODE_LEN}
-                  onSubmitEditing={() => submit()}
-                />
-              </View>
+            <TouchableOpacity
+              style={[s.primaryBtn, (busy || code.length !== CODE_LEN) && s.primaryBtnDisabled]}
+              onPress={() => submit()}
+              disabled={busy || code.length !== CODE_LEN}
+              activeOpacity={0.85}
+            >
+              {busy ? <ActivityIndicator color="#000" /> : <Text style={s.primaryLabel}>Join</Text>}
+            </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[s.primaryBtn, (busy || code.length !== CODE_LEN) && s.primaryBtnDisabled]}
-                onPress={() => submit()}
-                disabled={busy || code.length !== CODE_LEN}
-                activeOpacity={0.85}
-              >
-                {busy ? <ActivityIndicator color="#000" /> : <Text style={s.primaryLabel}>Join</Text>}
-              </TouchableOpacity>
+            {error ? <Text style={s.error}>{error}</Text> : null}
 
-              {error ? <Text style={s.error}>{error}</Text> : null}
-
-              <Text style={s.fine}>
-                Heads up — joining will replace your current iita calendar with your partner's. If you want to keep yours, ask them to join you instead.
-              </Text>
-            </>
-          )}
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+            <Text style={s.fine}>
+              Heads up — joining will replace your current iita calendar with your partner's. If you want to keep yours, ask them to join you instead.
+            </Text>
+          </>
+        )}
+      </Drawer.Body>
+    </Drawer>
   );
 }
 
@@ -140,12 +125,7 @@ function parseApiError(e) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 16 },
-
-  body: { flex: 1, padding: spacing.xl, gap: spacing.lg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
+  center: { alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.xl },
 
   lead: { color: colors.text, fontFamily: FF.regular, fontSize: 16, lineHeight: 22, textAlign: 'center' },
 
@@ -160,7 +140,7 @@ const s = StyleSheet.create({
   primaryLabel: { color: '#000', fontFamily: FF.semibold, fontSize: 15 },
 
   error: { color: colors.warn, fontFamily: FF.regular, fontSize: 13, textAlign: 'center' },
-  fine: { color: colors.textFaint, fontFamily: FF.light, fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 'auto' },
+  fine: { color: colors.textFaint, fontFamily: FF.light, fontSize: 11, lineHeight: 16, textAlign: 'center' },
 
   signinTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 20 },
   signinBody:  { color: colors.textMid, fontFamily: FF.regular, fontSize: 14, lineHeight: 20, textAlign: 'center', maxWidth: 320 },

@@ -35,6 +35,7 @@ const TOGETHER_HINTS = [
 const TIME_PATTERNS = [
   /\b(\d{1,2}:\d{2}\s*(?:am|pm)?)\b/i,        // 18:30, 9:00 am
   /\b(\d{1,2}\s*(?:am|pm))\b/i,               // 9am, 6 pm
+  /\b(all\s*day)\b/i,
   /\b(morning|afternoon|evening|night|noon)\b/i,
   /\b(am|pm)\b/i,                              // standalone
 ];

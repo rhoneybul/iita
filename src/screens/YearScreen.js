@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fontFamily, spacing, radius, layout } from '../theme';
 import { getEvents, deleteEvent, saveEvent } from '../services/storageService';
 import { MONTHS_LONG, fromISODate } from '../utils/dates';
+import { formatTime } from '../utils/time';
 import { labelOf } from '../data/labels';
 import BottomNav from '../components/BottomNav';
 
@@ -217,9 +218,9 @@ export default function YearScreen({ navigation }) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[s.title, item.done && s.titleDone, isPast && s.textDone]} numberOfLines={2}>{item.title}</Text>
-                {(item.location || item.withWho) && (
+                {(item.location || item.withWho || item.time) && (
                   <Text style={[s.meta, faded && s.textDone]} numberOfLines={1}>
-                    {[item.withWho, item.location].filter(Boolean).join(' · ')}
+                    {[formatTime(item.time), item.withWho, item.location].filter(Boolean).join(' · ')}
                   </Text>
                 )}
               </View>

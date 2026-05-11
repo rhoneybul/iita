@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fontFamily, spacing, radius, layout, useBottomInset } from '../theme';
 import { getWeek, deleteActivity, emptyDay } from '../services/storageService';
 import { dayLabel } from '../utils/dates';
-import { sortActivities } from '../utils/time';
+import { sortActivities, formatTime } from '../utils/time';
 import { labelOf } from '../data/labels';
 import { initialOf, colorForName } from '../utils/avatar';
 
@@ -119,7 +119,7 @@ function ActivityRow({ activity, onPress, onLongPress }) {
       activeOpacity={0.7}
     >
       <View style={s.timeCol}>
-        {activity.time ? <Text style={s.time}>{activity.time}</Text> : <Text style={s.timeEmpty}>·</Text>}
+        {activity.time ? <Text style={s.time} numberOfLines={1}>{formatTime(activity.time)}</Text> : <Text style={s.timeEmpty}>·</Text>}
       </View>
       <View style={{ flex: 1 }}>
         <Text style={s.title}>{activity.title}</Text>
@@ -160,7 +160,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.surface, borderRadius: radius.md,
     borderWidth: 1, borderColor: colors.border,
   },
-  timeCol: { width: 56, alignItems: 'flex-start' },
+  timeCol: { width: 88, alignItems: 'flex-start' },
   time:    { color: colors.primary, fontFamily: FF.semibold, fontSize: 13, letterSpacing: 0.3 },
   timeEmpty: { color: colors.textFaint, fontFamily: FF.regular, fontSize: 14 },
 

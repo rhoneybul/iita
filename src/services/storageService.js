@@ -191,6 +191,38 @@ export async function deleteActivity(weekStart, dayKey, activityId) {
   await saveWeek(week);
 }
 
+// Move an activity to a different day in the same week, optionally
+// patching fields at the same time. Returns the saved activity.
+export async function moveActivity(weekStart, fromDay, toDay, activityId, patch = {}) {
+  if (fromDay === toDay) {
+    // Same day — fall through to a plain save with the patch applied.
+    const week = await getWeek(weekStart);
+    const day = week.days[fromDay] || emptyDay();
+    const a = (day.activities || []).find(x => x.id === activityId);
+    if (!a) return null;
+    return saveActivity(weekStart, fromDay, { ...a, ...patch });
+  }
+  const week = await getWeek(weekStart);
+  const src = week.days[fromDay] || emptyDay();
+  const a = (src.activities || []).find(x => x.id === activityId);
+  if (!a) return null;
+  // Remove from source.
+  src.activities = src.activities.filter(x => x.id !== activityId);
+  week.days[fromDay] = src;
+  // Append to destination with the patch.
+  const dst = week.days[toDay] || emptyDay();
+  const next = normaliseActivity({ ...a, ...patch });
+  if (!next.title) {
+    week.days[fromDay] = src;
+    await saveWeek(week);
+    return null;
+  }
+  dst.activities = [...(dst.activities || []), next];
+  week.days[toDay] = dst;
+  await saveWeek(week);
+  return next;
+}
+
 // Used by the WeekIntake flow — overwrite all activities for the days
 // the LLM/heuristic produced output for; leave other days untouched.
 export async function replaceDays(weekStart, daysPatch) {

@@ -12,12 +12,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fontFamily, spacing, radius, layout } from '../theme';
-import { getWeek, WEEKDAYS, emptyDay, getEvents, getList, saveListItem } from '../services/storageService';
+import { getWeek, WEEKDAYS, emptyDay, getEvents, getList } from '../services/storageService';
 import {
   isoWeekStart, shiftWeek, weekRangeLabel, fromISODate, addDays,
   toISODate, WEEKDAYS_LONG,
 } from '../utils/dates';
-import { sortActivities } from '../utils/time';
+import { sortActivities, formatTime } from '../utils/time';
 import { labelOf } from '../data/labels';
 import { initialOf, colorForName } from '../utils/avatar';
 import BottomNav from '../components/BottomNav';
@@ -36,11 +36,6 @@ export default function HomeScreen({ navigation }) {
     setEvents(e);
     setTodos(t);
   }, [weekStart]);
-
-  async function toggleTodo(item) {
-    await saveListItem('todo', { ...item, done: !item.done });
-    load();
-  }
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -122,58 +117,31 @@ export default function HomeScreen({ navigation }) {
               onPress={() => navigation.navigate('WeekIntake', { weekStart })}
               activeOpacity={0.85}
             >
-              <Ionicons name="mic" size={18} color="#000" />
+              <Ionicons name="sparkles" size={18} color="#000" />
               <Text style={s.ctaPrimaryLabel}>Plan the week</Text>
             </TouchableOpacity>
-            <Text style={s.ctaHint}>Dictate or type — Claude lays it out by day.</Text>
+            <Text style={s.ctaHint}>Type what's coming up — Claude lays it out by day.</Text>
           </>
         )}
 
-        {/* To-do peek — top 3 open items, tap circle to toggle, header
-            navigates to the full list. Hides entirely when nothing is
-            open so it never wastes space. */}
         {(() => {
           const openTodos = todos.filter(t => !t.done);
-          if (openTodos.length === 0) return null;
-          const preview = openTodos.slice(0, 3);
-          const more = openTodos.length - preview.length;
           return (
-            <View style={s.todoCard}>
-              <TouchableOpacity
-                style={s.todoHead}
-                onPress={() => navigation.navigate('Todo')}
-                activeOpacity={0.7}
-              >
-                <View style={s.todoHeadLeft}>
-                  <Ionicons name="list-outline" size={14} color={colors.primary} />
-                  <Text style={s.todoTitle}>To-do</Text>
-                  <View style={s.todoBadge}>
-                    <Text style={s.todoBadgeText}>{openTodos.length}</Text>
-                  </View>
+            <TouchableOpacity
+              style={s.todoBtn}
+              onPress={() => navigation.navigate('Todo')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="checkbox-outline" size={16} color={colors.primary} />
+              <Text style={s.todoBtnLabel}>To-do</Text>
+              {openTodos.length > 0 && (
+                <View style={s.todoBtnBadge}>
+                  <Text style={s.todoBtnBadgeText}>{openTodos.length}</Text>
                 </View>
-                <View style={s.todoHeadRight}>
-                  <Text style={s.todoViewAll}>View all</Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
-                </View>
-              </TouchableOpacity>
-              {preview.map(item => (
-                <View key={item.id} style={s.todoLine}>
-                  <TouchableOpacity
-                    onPress={() => toggleTodo(item)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="ellipse-outline" size={20} color={colors.textMuted} />
-                  </TouchableOpacity>
-                  <Text style={s.todoText} numberOfLines={1}>{item.title}</Text>
-                </View>
-              ))}
-              {more > 0 && (
-                <TouchableOpacity onPress={() => navigation.navigate('Todo')} activeOpacity={0.6}>
-                  <Text style={s.todoMore}>+ {more} more</Text>
-                </TouchableOpacity>
               )}
-            </View>
+              <View style={{ flex: 1 }} />
+              <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+            </TouchableOpacity>
           );
         })()}
 
@@ -212,21 +180,25 @@ export default function HomeScreen({ navigation }) {
 
               {dayEvents.length > 0 && (
                 <View style={s.evRow}>
-                  {dayEvents.map(e => (
-                    <TouchableOpacity
-                      key={e.id}
-                      style={s.evPill}
-                      activeOpacity={0.7}
-                      onPress={() => navigation.navigate('AddEvent', { eventId: e.id })}
-                    >
-                      <Ionicons
-                        name={e.done ? 'checkmark-circle' : 'star'}
-                        size={10}
-                        color={e.done ? colors.good : colors.primary}
-                      />
-                      <Text style={[s.evPillText, e.done && s.evPillTextDone]}>{e.title}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {dayEvents.map(e => {
+                    const t = formatTime(e.time);
+                    return (
+                      <TouchableOpacity
+                        key={e.id}
+                        style={s.evPill}
+                        activeOpacity={0.7}
+                        onPress={() => navigation.navigate('AddEvent', { eventId: e.id })}
+                      >
+                        <Ionicons
+                          name={e.done ? 'checkmark-circle' : 'star'}
+                          size={10}
+                          color={e.done ? colors.good : colors.primary}
+                        />
+                        <Text style={[s.evPillText, e.done && s.evPillTextDone]}>{e.title}</Text>
+                        {t ? <Text style={s.evPillTime}>· {t}</Text> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               )}
 
@@ -237,7 +209,7 @@ export default function HomeScreen({ navigation }) {
                   <TouchableOpacity key={a.id} style={s.actLine} onPress={openDay} activeOpacity={0.7}>
                     <View style={s.actTimeCol}>
                       {a.time ? (
-                        <Text style={s.actTime}>{a.time}</Text>
+                        <Text style={s.actTime} numberOfLines={1}>{formatTime(a.time)}</Text>
                       ) : (
                         <Text style={s.actTimeDot}>·</Text>
                       )}
@@ -305,25 +277,18 @@ const s = StyleSheet.create({
   ctaSubtleLabel: { color: colors.textMid, fontFamily: FF.medium, fontSize: 13 },
   ctaHint: { color: colors.textMuted, fontFamily: FF.light, fontSize: 13, textAlign: 'center', marginBottom: spacing.lg, lineHeight: 18 },
 
-  // ── To-do peek ──
-  todoCard: {
+  // ── To-do button ──
+  todoBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 10, paddingHorizontal: spacing.lg,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1, borderColor: colors.border,
-    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
     marginBottom: spacing.xs,
-    gap: 6,
   },
-  todoHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
-  todoHeadLeft:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  todoHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 1 },
-  todoTitle:    { color: colors.text, fontFamily: FF.semibold, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8 },
-  todoBadge:    { backgroundColor: colors.primaryLight, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, marginLeft: 2 },
-  todoBadgeText:{ color: colors.primary, fontFamily: FF.semibold, fontSize: 10 },
-  todoViewAll:  { color: colors.textMuted, fontFamily: FF.medium, fontSize: 11 },
-  todoLine:     { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 4 },
-  todoText:     { flex: 1, color: colors.text, fontFamily: FF.regular, fontSize: 14, lineHeight: 18 },
-  todoMore:     { color: colors.textMuted, fontFamily: FF.light, fontSize: 12, paddingTop: 4 },
+  todoBtnLabel:     { color: colors.text, fontFamily: FF.semibold, fontSize: 13, letterSpacing: 0.3 },
+  todoBtnBadge:     { backgroundColor: colors.primaryLight, paddingHorizontal: 7, paddingVertical: 1, borderRadius: 999 },
+  todoBtnBadgeText: { color: colors.primary, fontFamily: FF.semibold, fontSize: 10 },
 
   dayRow: {
     paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
@@ -353,10 +318,11 @@ const s = StyleSheet.create({
   evPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.primaryLight },
   evPillText: { color: colors.text, fontFamily: FF.medium, fontSize: 11 },
   evPillTextDone: { textDecorationLine: 'line-through', color: colors.textMid },
+  evPillTime: { color: colors.textMid, fontFamily: FF.light, fontSize: 10 },
 
   // ── Activity line ──
   actLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 3 },
-  actTimeCol: { width: 52, alignItems: 'flex-start' },
+  actTimeCol: { width: 76, alignItems: 'flex-start' },
   actTime:    { color: colors.primary, fontFamily: FF.semibold, fontSize: 12, letterSpacing: 0.2 },
   actTimeDot: { color: colors.textFaint, fontFamily: FF.regular, fontSize: 13 },
   actTitle:   { flex: 1, color: colors.text, fontFamily: FF.regular, fontSize: 14, lineHeight: 18 },

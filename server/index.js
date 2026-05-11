@@ -122,7 +122,7 @@ Turn it into a structured per-day plan.
 For each day MENTIONED (Mon..Sun), produce an array of activities. Each
 activity has:
   - title     (string, required) — short label, e.g. "Cycling with Ollie", "Office", "Dinner with Josh"
-  - time      (string, optional) — free-form, e.g. "9am", "18:30", "morning", "evening", "night"
+  - time      (string, optional) — one of: "morning", "noon", "night", "all day", a clock value ("9am", "18:30"), or a range ("09:00-11:00")
   - label     (string, optional) — one of: "exercise", "work", "social", "travel", "important", "other"
   - together  (boolean)          — true ONLY if the user makes clear they're doing this WITH THEIR PARTNER
 
