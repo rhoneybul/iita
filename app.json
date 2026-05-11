@@ -21,7 +21,9 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSSpeechRecognitionUsageDescription": "iita uses on-device speech recognition to turn what you say into text. Audio stays on your phone.",
-        "NSMicrophoneUsageDescription": "iita uses the microphone so you can dictate the week instead of typing."
+        "NSMicrophoneUsageDescription": "iita uses the microphone so you can dictate the week instead of typing.",
+        "NSPhotoLibraryUsageDescription": "iita doesn't access your photo library. This string is required by Apple because a bundled framework references the photos API.",
+        "NSCameraUsageDescription": "iita doesn't access your camera. This string is required by Apple because a bundled framework references the camera API."
       },
       "buildNumber": "2"
     },
