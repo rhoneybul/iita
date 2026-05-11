@@ -50,20 +50,37 @@ import { useFonts, Poppins_300Light, Poppins_400Regular, Poppins_500Medium, Popp
 import * as SplashScreen from 'expo-splash-screen';
 import * as Updates from 'expo-updates';
 
+import * as Linking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import LoadingSplash from './src/components/LoadingSplash';
 import WebWrapper from './src/components/WebWrapper';
 import analytics from './src/services/analyticsService';
 import { getSession, getCurrentUser, signOut, onAuthStateChange } from './src/services/authService';
-import { ensureUserData, hydrateFromServer, seedIfEmpty } from './src/services/storageService';
-import { SEED_EVENTS } from './src/data/seedEvents';
+import { ensureUserData, hydrateFromServer } from './src/services/storageService';
 
-import SignInScreen      from './src/screens/SignInScreen';
-import HomeScreen        from './src/screens/HomeScreen';
-import WeekIntakeScreen  from './src/screens/WeekIntakeScreen';
-import DayDetailScreen   from './src/screens/DayDetailScreen';
-import YearScreen        from './src/screens/YearScreen';
-import AddEventScreen    from './src/screens/AddEventScreen';
-import SettingsScreen    from './src/screens/SettingsScreen';
+import SignInScreen          from './src/screens/SignInScreen';
+import HomeScreen            from './src/screens/HomeScreen';
+import WeekIntakeScreen      from './src/screens/WeekIntakeScreen';
+import DayDetailScreen       from './src/screens/DayDetailScreen';
+import YearScreen            from './src/screens/YearScreen';
+import AddEventScreen        from './src/screens/AddEventScreen';
+import SettingsScreen        from './src/screens/SettingsScreen';
+import InvitePartnerScreen   from './src/screens/InvitePartnerScreen';
+import JoinPairScreen        from './src/screens/JoinPairScreen';
+import ChecklistScreen       from './src/screens/ChecklistScreen';
+import ActivityEditScreen    from './src/screens/ActivityEditScreen';
+
+// Deep-link handler. `iita://invite/<code>` opens the app on JoinPair
+// with the code pre-filled. If the user isn't signed in yet, we stash
+// the code in AsyncStorage and pick it up after sign-in.
+const PENDING_INVITE_KEY = '@iita_pending_invite';
+
+function parseInviteCode(url) {
+  if (!url) return null;
+  const m = url.match(/iita:\/\/invite\/([A-Z0-9]+)/i);
+  return m ? m[1].toUpperCase() : null;
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -150,7 +167,6 @@ function App() {
 
         const cleared = await ensureUserData(session.user?.id);
         await hydrateFromServer({ force: cleared });
-        await seedIfEmpty(SEED_EVENTS);
 
         setInitialRoute('Home');
       } else {
@@ -166,7 +182,28 @@ function App() {
       }
     });
 
-    return () => unsubAuth();
+    // ── Deep-link → JoinPair ─────────────────────────────────────────
+    // If the app was launched by tapping an `iita://invite/<code>`
+    // link, route there as soon as we know who the user is. Foreground
+    // taps on the same scheme route immediately.
+    async function routeInvite(url, { onlyIfSignedIn = false } = {}) {
+      const code = parseInviteCode(url);
+      if (!code) return;
+      await AsyncStorage.setItem(PENDING_INVITE_KEY, code);
+      const session = await getSession();
+      if (!session && onlyIfSignedIn) return; // wait for sign-in
+      const nav = navigationRef.current;
+      if (!nav) return;
+      // Wait a tick so NavigationContainer is mounted on cold start.
+      setTimeout(() => {
+        try { nav.navigate('JoinPair', { code }); } catch {}
+      }, 50);
+    }
+
+    Linking.getInitialURL().then(url => routeInvite(url, { onlyIfSignedIn: true }));
+    const linkSub = Linking.addEventListener('url', ({ url }) => routeInvite(url));
+
+    return () => { unsubAuth(); linkSub?.remove?.(); };
   }, []);
 
   useEffect(() => {
@@ -213,6 +250,11 @@ function App() {
                   options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
                 />
                 <Stack.Screen name="DayDetail"   component={DayDetailScreen} />
+                <Stack.Screen
+                  name="ActivityEdit"
+                  component={ActivityEditScreen}
+                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                />
                 <Stack.Screen name="Year"        component={YearScreen} />
                 <Stack.Screen
                   name="AddEvent"
@@ -220,6 +262,26 @@ function App() {
                   options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
                 />
                 <Stack.Screen name="Settings"    component={SettingsScreen} />
+                <Stack.Screen
+                  name="InvitePartner"
+                  component={InvitePartnerScreen}
+                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                />
+                <Stack.Screen
+                  name="JoinPair"
+                  component={JoinPairScreen}
+                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                />
+                <Stack.Screen
+                  name="Todo"
+                  component={ChecklistScreen}
+                  initialParams={{ kind: 'todo' }}
+                />
+                <Stack.Screen
+                  name="Wishlist"
+                  component={ChecklistScreen}
+                  initialParams={{ kind: 'wish' }}
+                />
               </Stack.Navigator>
             </NavigationContainer>
           </View>

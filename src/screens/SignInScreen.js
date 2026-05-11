@@ -6,12 +6,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import Svg, { Path } from 'react-native-svg';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { colors, fontFamily, spacing, radius } from '../theme';
 import {
   signInWithGoogle, signInWithApple, onAuthStateChange, getSession, isSupabaseConfigured,
 } from '../services/authService';
-import { ensureUserData, hydrateFromServer, seedIfEmpty } from '../services/storageService';
-import { SEED_EVENTS } from '../data/seedEvents';
+import { ensureUserData, hydrateFromServer } from '../services/storageService';
+
+const PENDING_INVITE_KEY = '@iita_pending_invite';
+
+// If the user opened the app via `iita://invite/<code>` before signing
+// in, that code is sitting in AsyncStorage. Pick it up here and route
+// to JoinPair instead of Home so they don't have to retype it.
+async function nextRouteAfterAuth() {
+  const code = await AsyncStorage.getItem(PENDING_INVITE_KEY);
+  if (code) {
+    await AsyncStorage.removeItem(PENDING_INVITE_KEY);
+    return { name: 'JoinPair', params: { code } };
+  }
+  return { name: 'Home' };
+}
 
 const FF = fontFamily;
 
@@ -46,14 +61,19 @@ export default function SignInScreen({ navigation }) {
       Animated.timing(slide, { toValue: 0, duration: 700, useNativeDriver: true }),
     ]).start();
 
-    getSession().then(s => { if (s) navigation.replace('Home'); });
+    getSession().then(async s => {
+      if (s) {
+        const next = await nextRouteAfterAuth();
+        navigation.replace(next.name, next.params);
+      }
+    });
 
     const unsub = onAuthStateChange(async user => {
       if (user) {
         const cleared = await ensureUserData(user.id);
         await hydrateFromServer({ force: cleared });
-        await seedIfEmpty(SEED_EVENTS);
-        navigation.replace('Home');
+        const next = await nextRouteAfterAuth();
+        navigation.replace(next.name, next.params);
       }
     });
     return unsub;
@@ -61,8 +81,8 @@ export default function SignInScreen({ navigation }) {
 
   async function handleGuest() {
     await ensureUserData('guest');
-    await seedIfEmpty(SEED_EVENTS);
-    navigation.replace('Home');
+    const next = await nextRouteAfterAuth();
+    navigation.replace(next.name, next.params);
   }
 
   async function handleGoogle() {

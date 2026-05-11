@@ -40,5 +40,15 @@ export const api = {
     upsertEvent:   (event)   => request('/state/event', { method: 'PUT',    body: event }),
     deleteEvent:   (id)      => request(`/state/event/${id}`, { method: 'DELETE' }),
   },
+  pair: {
+    get:    ()     => request('/pair'),
+    invite: ()     => request('/pair/invite', { method: 'POST' }),
+    redeem: (code) => request('/pair/redeem', { method: 'POST', body: { code } }),
+    leave:  ()     => request('/pair/me',     { method: 'DELETE' }),
+  },
+  list: {
+    upsert: (kind, item) => request(`/state/list/${kind}`,        { method: 'PUT',    body: item }),
+    remove: (kind, id)   => request(`/state/list/${kind}/${id}`,  { method: 'DELETE' }),
+  },
   parseWeek: (input) => request('/parse-week', { method: 'POST', body: input }),
 };

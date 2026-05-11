@@ -21,6 +21,9 @@ export const colors = {
   secondary:      '#4B6B8F',
   secondaryLight: '#4B6B8F15',
 
+  teal:           '#06B6D4',
+  tealLight:      '#06B6D415',
+
   good:         '#22C55E',
   goodLight:    '#22C55E15',
   caution:      '#F59E0B',

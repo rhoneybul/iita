@@ -6,9 +6,12 @@
 // Shape:
 //   week = {
 //     weekStart: '2026-05-11',
-//     days: { Mon: { donde, juntos, oficina, importante, ejercicio, queMas }, ... }
+//     days: {
+//       Mon: { activities: [ { id, title, time, label, together }, ... ] },
+//       ...
+//     }
 //   }
-//   event = { id, date: 'YYYY-MM-DD', endDate?: 'YYYY-MM-DD', title, location?, withWho? }
+//   event = { id, date: 'YYYY-MM-DD', endDate?: 'YYYY-MM-DD', title, location?, withWho?, done? }
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from './api';
@@ -19,7 +22,18 @@ const KEYS = {
   EVENTS:       '@iita_events_v1',
   CURRENT_USER: '@iita_current_user_id',
   USER_PREFS:   '@iita_user_prefs_v1',
+  LIST_TODO:    '@iita_list_todo_v1',
+  LIST_WISH:    '@iita_list_wish_v1',
 };
+
+// Maps the `kind` route param to a storage key. Keep this in lock-step
+// with the `kind` check constraint in the SQL migration.
+const LIST_KEY_FOR = {
+  todo: KEYS.LIST_TODO,
+  wish: KEYS.LIST_WISH,
+};
+
+export const LIST_KINDS = ['todo', 'wish'];
 
 export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -36,7 +50,7 @@ async function setJSON(key, value) {
 }
 
 export function emptyDay() {
-  return { donde: '', juntos: '', oficina: '', importante: '', ejercicio: '', queMas: '' };
+  return { activities: [] };
 }
 
 export function emptyWeek(weekStart) {
@@ -44,6 +58,27 @@ export function emptyWeek(weekStart) {
     weekStart,
     days: WEEKDAYS.reduce((acc, d) => ({ ...acc, [d]: emptyDay() }), {}),
   };
+}
+
+// One-way migration from the old six-column shape to the new
+// activity-list shape. Pre-launch only — once we're confident no
+// devices still hold v1 data, this can come out.
+function normaliseDay(day) {
+  if (!day) return emptyDay();
+  if (Array.isArray(day.activities)) return day;
+  const acts = [];
+  const push = (title, label, together = false) => {
+    const trimmed = String(title || '').trim();
+    if (!trimmed) return;
+    acts.push({ id: uid(), title: trimmed, time: '', label, together });
+  };
+  push(day.donde,      'travel');
+  push(day.oficina === 'Yes' ? 'Office' : day.oficina, 'work');
+  push(day.juntos,     'social',    true);
+  push(day.importante, 'important');
+  push(day.ejercicio,  'exercise');
+  push(day.queMas,     'other');
+  return { activities: acts };
 }
 
 // ── User scoping ─────────────────────────────────────────────────────────────
@@ -65,8 +100,10 @@ export async function hydrateFromServer({ force = false } = {}) {
   try {
     const remote = await api.state.get();
     if (!remote) return false;
-    if (force || !(await getJSON(KEYS.WEEKS)))  await setJSON(KEYS.WEEKS,  remote.weeks  || {});
-    if (force || !(await getJSON(KEYS.EVENTS))) await setJSON(KEYS.EVENTS, remote.events || []);
+    if (force || !(await getJSON(KEYS.WEEKS)))      await setJSON(KEYS.WEEKS,      remote.weeks  || {});
+    if (force || !(await getJSON(KEYS.EVENTS)))     await setJSON(KEYS.EVENTS,     remote.events || []);
+    if (force || !(await getJSON(KEYS.LIST_TODO))) await setJSON(KEYS.LIST_TODO, remote.todos  || []);
+    if (force || !(await getJSON(KEYS.LIST_WISH))) await setJSON(KEYS.LIST_WISH, remote.wishes || []);
     return true;
   } catch {
     return false;
@@ -77,7 +114,13 @@ export async function hydrateFromServer({ force = false } = {}) {
 
 export async function getWeek(weekStart) {
   const all = (await getJSON(KEYS.WEEKS)) || {};
-  return all[weekStart] || emptyWeek(weekStart);
+  const week = all[weekStart] || emptyWeek(weekStart);
+  // Defensive normalisation — anything stored under the old six-column
+  // shape gets converted into activities here on first read.
+  for (const k of WEEKDAYS) {
+    week.days[k] = normaliseDay(week.days[k]);
+  }
+  return week;
 }
 
 export async function getCurrentWeek(now = new Date()) {
@@ -97,6 +140,54 @@ export async function saveDay(weekStart, day, patch) {
   const week = await getWeek(weekStart);
   week.days[day] = { ...emptyDay(), ...(week.days[day] || {}), ...patch };
   return saveWeek(week);
+}
+
+// ── Activity-level helpers ───────────────────────────────────────────────────
+
+function normaliseActivity(a) {
+  return {
+    id:       a.id || uid(),
+    title:    String(a.title || '').trim(),
+    time:     String(a.time  || '').trim(),
+    label:    a.label || '',
+    together: !!a.together,
+  };
+}
+
+export async function saveActivity(weekStart, dayKey, activity) {
+  const week = await getWeek(weekStart);
+  const day = week.days[dayKey] || emptyDay();
+  const next = normaliseActivity(activity);
+  if (!next.title) return null;
+  const idx = day.activities.findIndex(a => a.id === next.id);
+  if (idx >= 0) day.activities[idx] = next; else day.activities.push(next);
+  week.days[dayKey] = day;
+  await saveWeek(week);
+  return next;
+}
+
+export async function deleteActivity(weekStart, dayKey, activityId) {
+  const week = await getWeek(weekStart);
+  const day = week.days[dayKey] || emptyDay();
+  day.activities = day.activities.filter(a => a.id !== activityId);
+  week.days[dayKey] = day;
+  await saveWeek(week);
+}
+
+// Used by the WeekIntake flow — overwrite all activities for the days
+// the LLM/heuristic produced output for; leave other days untouched.
+export async function replaceDays(weekStart, daysPatch) {
+  const week = await getWeek(weekStart);
+  for (const dayKey of Object.keys(daysPatch || {})) {
+    if (!WEEKDAYS.includes(dayKey)) continue;
+    const incoming = daysPatch[dayKey];
+    if (!incoming || !Array.isArray(incoming.activities)) continue;
+    week.days[dayKey] = {
+      activities: incoming.activities.map(normaliseActivity).filter(a => a.title),
+    };
+  }
+  await saveWeek(week);
+  return week;
 }
 
 export async function getAllWeeks() {
@@ -151,10 +242,50 @@ export async function setUserPrefs(patch) {
   return next;
 }
 
-// ── First-run seed ───────────────────────────────────────────────────────────
+// ── Lists (todo + wish, both pair-scoped) ────────────────────────────────────
 
-export async function seedIfEmpty(seedEvents) {
-  const existing = await getEvents();
-  if (existing.length > 0) return;
-  await bulkUpsertEvents(seedEvents);
+export async function getList(kind) {
+  const key = LIST_KEY_FOR[kind];
+  if (!key) throw new Error(`unknown list kind: ${kind}`);
+  return (await getJSON(key)) || [];
+}
+
+export async function saveListItem(kind, item) {
+  const key = LIST_KEY_FOR[kind];
+  if (!key) throw new Error(`unknown list kind: ${kind}`);
+  if (!item?.title) throw new Error('item.title required');
+  const list = await getList(kind);
+  const data = {
+    id: item.id || uid(),
+    title: item.title,
+    notes: item.notes || null,
+    done: !!item.done,
+    createdAt: item.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const idx = list.findIndex(i => i.id === data.id);
+  if (idx >= 0) list[idx] = data; else list.push(data);
+  await setJSON(key, list);
+  api.list?.upsert(kind, data).catch(() => {});
+  return data;
+}
+
+export async function deleteListItem(kind, id) {
+  const key = LIST_KEY_FOR[kind];
+  if (!key) throw new Error(`unknown list kind: ${kind}`);
+  const list = (await getList(kind)).filter(i => i.id !== id);
+  await setJSON(key, list);
+  api.list?.remove(kind, id).catch(() => {});
+}
+
+// ── Local wipe (used by partner-join, since joining adopts the
+//    partner's calendar instead of merging) ─────────────────────────────────
+
+export async function wipeLocalCalendar() {
+  await AsyncStorage.multiRemove([
+    KEYS.WEEKS,
+    KEYS.EVENTS,
+    KEYS.LIST_TODO,
+    KEYS.LIST_WISH,
+  ]);
 }
