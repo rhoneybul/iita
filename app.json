@@ -17,7 +17,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.iita.app",
+      "bundleIdentifier": "com.rhoneybul.iita",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSSpeechRecognitionUsageDescription": "iita uses on-device speech recognition to turn what you say into text. Audio stays on your phone.",
@@ -35,7 +35,7 @@
         "resizeMode": "contain",
         "backgroundColor": "#000000"
       },
-      "package": "com.iita.app",
+      "package": "com.rhoneybul.iita",
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
