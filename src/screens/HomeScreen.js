@@ -2,17 +2,17 @@
 // list: time on the left, title in the middle, label chip + heart on
 // the right. Empty days collapse to a single thin tappable row.
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Platform, ActionSheetIOS, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fontFamily, spacing, radius, layout } from '../theme';
-import { getWeek, WEEKDAYS, emptyDay, getEvents, getList } from '../services/storageService';
+import { getWeek, WEEKDAYS, emptyDay, getEvents, getList, getUserPrefs, setUserPrefs } from '../services/storageService';
+import OnboardingTour from '../components/OnboardingTour';
 import {
   isoWeekStart, shiftWeek, weekRangeLabel, fromISODate, addDays,
   toISODate, WEEKDAYS_LONG,
@@ -29,6 +29,20 @@ export default function HomeScreen({ navigation }) {
   const [week, setWeek] = useState(null);
   const [events, setEvents] = useState([]);
   const [todos, setTodos] = useState([]);
+  const [showTour, setShowTour] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const prefs = await getUserPrefs();
+      if (!prefs?.tourSeen) setShowTour(true);
+    })();
+  }, []);
+
+  const finishTour = useCallback(async (openInvite) => {
+    setShowTour(false);
+    try { await setUserPrefs({ tourSeen: true }); } catch {}
+    if (openInvite) navigation.navigate('InvitePartner');
+  }, [navigation]);
 
   const load = useCallback(async () => {
     const [w, e, t] = await Promise.all([getWeek(weekStart), getEvents(), getList('todo')]);
@@ -66,22 +80,6 @@ export default function HomeScreen({ navigation }) {
   const todayISO = toISODate(new Date());
   const onCurrentWeek = weekStart === isoWeekStart(new Date());
 
-  function openMore() {
-    const labels = ['To-do', 'Wish list', 'Settings'];
-    const routes = ['Todo',  'Wishlist',  'Settings'];
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: [...labels, 'Cancel'], cancelButtonIndex: labels.length, userInterfaceStyle: 'dark' },
-        (i) => { if (i >= 0 && i < routes.length) navigation.navigate(routes[i]); },
-      );
-    } else {
-      Alert.alert('iita', null, [
-        ...labels.map((label, i) => ({ text: label, onPress: () => navigation.navigate(routes[i]) })),
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
-  }
-
   return (
     <SafeAreaView style={s.root} edges={['top']}>
       <View style={s.brandBar}>
@@ -89,7 +87,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={s.wordmark}>iita</Text>
           <Text style={s.tagline}>Plan the week together</Text>
         </View>
-        <TouchableOpacity onPress={openMore} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity onPress={() => navigation.navigate('Settings')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="ellipsis-horizontal" size={22} color={colors.textMid} />
         </TouchableOpacity>
       </View>
@@ -237,6 +235,12 @@ export default function HomeScreen({ navigation }) {
       </ScrollView>
 
       <BottomNav navigation={navigation} current="week" weekStart={weekStart} />
+
+      <OnboardingTour
+        visible={showTour}
+        onComplete={() => finishTour(false)}
+        onInvite={() => finishTour(true)}
+      />
     </SafeAreaView>
   );
 }

@@ -72,6 +72,35 @@ export default function SettingsScreen({ navigation }) {
     ]);
   }
 
+  async function handleDeleteAccount() {
+    Alert.alert(
+      'Delete your account?',
+      'This permanently deletes your iita account. If you have a partner, they keep the shared calendar. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => {
+          Alert.alert(
+            'Are you sure?',
+            'Your account and sign-in will be removed. You will be signed out.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete account', style: 'destructive', onPress: async () => {
+                try {
+                  if (api.enabled) await api.account.delete();
+                  await signOut();
+                  await wipeLocalCalendar();
+                  navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
+                } catch (e) {
+                  Alert.alert("Couldn't delete account", String(e?.message || e));
+                }
+              }},
+            ],
+          );
+        }},
+      ],
+    );
+  }
+
   const partner = (pair?.members || []).find(m => !m.is_self);
   const isPaired = !!partner;
 
@@ -138,6 +167,13 @@ export default function SettingsScreen({ navigation }) {
           <TouchableOpacity style={[s.row, { marginTop: spacing.xl }]} onPress={handleSignOut} activeOpacity={0.7}>
             <Ionicons name="log-out-outline" size={18} color={colors.textMid} />
             <Text style={s.rowLabel}>Sign out</Text>
+          </TouchableOpacity>
+        )}
+
+        {email && (
+          <TouchableOpacity style={s.row} onPress={handleDeleteAccount} activeOpacity={0.7}>
+            <Ionicons name="person-remove-outline" size={18} color={colors.warn} />
+            <Text style={[s.rowLabel, { color: colors.warn }]}>Delete account</Text>
           </TouchableOpacity>
         )}
 

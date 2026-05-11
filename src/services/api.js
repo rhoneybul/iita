@@ -46,6 +46,9 @@ export const api = {
     redeem: (code) => request('/pair/redeem', { method: 'POST', body: { code } }),
     leave:  ()     => request('/pair/me',     { method: 'DELETE' }),
   },
+  account: {
+    delete: () => request('/account/me', { method: 'DELETE' }),
+  },
   list: {
     upsert: (kind, item) => request(`/state/list/${kind}`,        { method: 'PUT',    body: item }),
     remove: (kind, id)   => request(`/state/list/${kind}/${id}`,  { method: 'DELETE' }),

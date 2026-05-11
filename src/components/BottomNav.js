@@ -1,62 +1,19 @@
-// Bottom tab bar — Week | + | Year. The central + is the universal
-// add affordance: every "thing" in iita is one of three kinds —
-//   1. a to-do (no time)
-//   2. an event (happens at some time → Year)
-//   3. something for the week (a day activity)
-// Tapping + opens an action sheet with those three options.
+// Bottom tab bar — Week | + | Year. The central + opens AddPicker, a
+// drawer with the three add flows + Plan-the-week.
 
 import React from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet,
-  Platform, ActionSheetIOS, Alert,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fontFamily, spacing, useBottomInset } from '../theme';
-import { isoWeekStart } from '../utils/dates';
-import { WEEKDAYS } from '../services/storageService';
 
 const FF = fontFamily;
-
-// JS Date.getDay(): 0=Sun..6=Sat. WEEKDAYS starts Mon, so shift.
-function todayDayKey() {
-  const d = new Date();
-  return WEEKDAYS[(d.getDay() + 6) % 7];
-}
 
 export default function BottomNav({ navigation, current, weekStart }) {
   const bottomInset = useBottomInset(0);
 
   function openAdd() {
-    const labels = ['Add to today', 'Add an event', 'Add a to-do', 'Plan the week'];
-    const onPick = (i) => {
-      if (i === 0) {
-        navigation.navigate('ActivityEdit', {
-          weekStart: isoWeekStart(new Date()),
-          day: todayDayKey(),
-          activityId: null,
-        });
-      }
-      else if (i === 1) navigation.navigate('AddEvent');
-      else if (i === 2) navigation.navigate('GeneralAdd');
-      else if (i === 3) navigation.navigate('WeekIntake', weekStart ? { weekStart } : undefined);
-    };
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: 'What are you adding?',
-          options: [...labels, 'Cancel'],
-          cancelButtonIndex: labels.length,
-          userInterfaceStyle: 'dark',
-        },
-        onPick,
-      );
-    } else {
-      Alert.alert('What are you adding?', null, [
-        ...labels.map((label, i) => ({ text: label, onPress: () => onPick(i) })),
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    navigation.navigate('AddPicker', weekStart ? { weekStart } : undefined);
   }
 
   function goWeek() {

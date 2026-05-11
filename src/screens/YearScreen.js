@@ -1,19 +1,20 @@
 // Year view — months down, events listed beneath each. On open we
 // auto-scroll to the current month so users land on "now" instead of
-// January. Tapping an event opens an action sheet: toggle done, or
-// delete. Done events render with a check + strikethrough.
+// January. Tapping a row opens the event in the edit drawer; the
+// inline trash button deletes (with confirm). Done events render with
+// a check + strikethrough.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, SectionList, TouchableOpacity, StyleSheet, Alert,
-  Platform, ActionSheetIOS, ActivityIndicator,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fontFamily, spacing, radius, layout } from '../theme';
-import { getEvents, deleteEvent, saveEvent } from '../services/storageService';
+import { getEvents, deleteEvent } from '../services/storageService';
 import { MONTHS_LONG, fromISODate } from '../utils/dates';
 import { formatTime } from '../utils/time';
 import { labelOf } from '../data/labels';
@@ -114,10 +115,6 @@ export default function YearScreen({ navigation }) {
   }, [hasLoaded, currentSectionIdx, sections.length, focusKey, year]);
 
   // ── Event actions ──
-  async function toggleDone(ev) {
-    await saveEvent({ ...ev, done: !ev.done });
-    load();
-  }
   async function remove(ev) {
     await deleteEvent(ev.id);
     load();
@@ -136,34 +133,6 @@ export default function YearScreen({ navigation }) {
 
   function openEdit(ev) {
     navigation.navigate('AddEvent', { eventId: ev.id });
-  }
-
-  function handleEventPress(ev) {
-    const doneOption = ev.done ? 'Mark not done' : 'Mark done';
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: ev.title,
-          message: formatDateRange(ev),
-          options: ['Edit', doneOption, 'Delete', 'Cancel'],
-          destructiveButtonIndex: 2,
-          cancelButtonIndex: 3,
-          userInterfaceStyle: 'dark',
-        },
-        (i) => {
-          if (i === 0) openEdit(ev);
-          else if (i === 1) toggleDone(ev);
-          else if (i === 2) remove(ev);
-        },
-      );
-    } else {
-      Alert.alert(ev.title, formatDateRange(ev), [
-        { text: 'Edit',     onPress: () => openEdit(ev) },
-        { text: doneOption, onPress: () => toggleDone(ev) },
-        { text: 'Delete', style: 'destructive', onPress: () => remove(ev) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
   }
 
   return (
@@ -207,8 +176,8 @@ export default function YearScreen({ navigation }) {
           return (
             <TouchableOpacity
               style={[s.row, faded && s.rowFaded]}
-              onPress={() => handleEventPress(item)}
-              activeOpacity={0.7}
+              onPress={() => openEdit(item)}
+              activeOpacity={0.6}
             >
               <View style={s.dateCol}>
                 <Text style={[s.dateDay, faded && s.textDone]}>{fromISODate(item.date)?.getDate()}</Text>
@@ -232,6 +201,7 @@ export default function YearScreen({ navigation }) {
               {item.done && (
                 <Ionicons name="checkmark-circle" size={20} color={colors.good} />
               )}
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={s.chevron} />
               <TouchableOpacity
                 onPress={() => confirmRemove(item)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -280,14 +250,6 @@ export default function YearScreen({ navigation }) {
   );
 }
 
-function formatDateRange(ev) {
-  const start = fromISODate(ev.date);
-  const end = ev.endDate ? fromISODate(ev.endDate) : null;
-  if (!start) return '';
-  const fmt = (d) => `${d.getDate()} ${MONTHS_LONG[d.getMonth()].slice(0, 3)} ${d.getFullYear()}`;
-  return end && end.getTime() !== start.getTime() ? `${fmt(start)} → ${fmt(end)}` : fmt(start);
-}
-
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -301,7 +263,8 @@ const s = StyleSheet.create({
 
   row: { ...layout.card({ flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border }) },
   rowFaded: { opacity: 0.5 },
-  trashBtn: { padding: spacing.xs, marginLeft: spacing.xs },
+  chevron: { marginLeft: -spacing.xs },
+  trashBtn: { padding: spacing.xs, marginLeft: -spacing.xs },
 
   dateCol: { width: 50, alignItems: 'center' },
   dateDay: { color: colors.text, fontFamily: FF.semibold, fontSize: 22, lineHeight: 26 },

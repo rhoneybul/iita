@@ -532,6 +532,40 @@ app.delete('/pair/me', auth, withPair, async (req, res) => {
   res.status(204).end();
 });
 
+// ── Account deletion ─────────────────────────────────────────────────────────
+//
+// Removes the caller from their pair (cascading data away if they were the
+// only member, matching /pair/me) and then deletes the Supabase auth user.
+// A partner, if any, keeps the shared weeks/events.
+
+app.delete('/account/me', auth, withPair, async (req, res) => {
+  if (!supabase) return res.status(204).end();
+
+  try {
+    const { data: members } = await supabase
+      .from('iita_pair_members')
+      .select('user_id')
+      .eq('pair_id', req.pair.id);
+
+    await supabase.from('iita_pair_members')
+      .delete()
+      .eq('pair_id', req.pair.id)
+      .eq('user_id', req.user.id);
+
+    if ((members || []).length === 1) {
+      await supabase.from('iita_pairs').delete().eq('id', req.pair.id);
+    }
+
+    const { error: delErr } = await supabase.auth.admin.deleteUser(req.user.id);
+    if (delErr) return res.status(500).json({ error: 'delete_user_failed', message: delErr.message });
+
+    res.status(204).end();
+  } catch (e) {
+    console.error('[account/me delete]', e);
+    res.status(500).json({ error: 'account_delete_failed', message: String(e?.message || e) });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`iita server on :${PORT} — anthropic=${!!anthropic}, supabase=${!!supabase}`);
 });

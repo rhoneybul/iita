@@ -93,11 +93,6 @@ export default function AddEventScreen({ route, navigation }) {
       <Drawer.Header
         title={isEdit ? 'Edit event' : 'Add to the year'}
         onClose={() => navigation.goBack()}
-        right={
-          <TouchableOpacity onPress={save} disabled={!canSave} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Text style={[s.headerAction, !canSave && { color: colors.textFaint }]}>Save</Text>
-          </TouchableOpacity>
-        }
       />
       <Drawer.Body>
         <View style={s.field}>
@@ -246,13 +241,22 @@ export default function AddEventScreen({ route, navigation }) {
           </>
         )}
       </Drawer.Body>
+
+      <Drawer.Footer>
+        <TouchableOpacity
+          style={[s.saveBtn, !canSave && s.saveBtnDisabled]}
+          onPress={save}
+          disabled={!canSave}
+          activeOpacity={0.85}
+        >
+          <Text style={s.saveBtnText}>{isEdit ? 'Save changes' : 'Add event'}</Text>
+        </TouchableOpacity>
+      </Drawer.Footer>
     </Drawer>
   );
 }
 
 const s = StyleSheet.create({
-  headerAction: { color: colors.primary, fontFamily: FF.semibold, fontSize: 14 },
-
   field: { ...layout.card({ padding: spacing.lg, borderWidth: 1, borderColor: colors.border }) },
   fieldLabel: { color: colors.text, fontFamily: FF.semibold, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.sm },
   fieldHint: { color: colors.textMuted, fontFamily: FF.light, fontSize: 11, textTransform: 'none', letterSpacing: 0 },
@@ -279,4 +283,11 @@ const s = StyleSheet.create({
     borderRadius: radius.md, borderWidth: 1, borderColor: colors.warn,
   },
   deleteLabel: { color: colors.warn, fontFamily: FF.semibold, fontSize: 14 },
+
+  saveBtn: {
+    backgroundColor: colors.primary, borderRadius: radius.pill,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  saveBtnDisabled: { opacity: 0.4 },
+  saveBtnText: { color: '#000', fontFamily: FF.semibold, fontSize: 15 },
 });

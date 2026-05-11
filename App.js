@@ -73,6 +73,8 @@ import ActivityEditScreen    from './src/screens/ActivityEditScreen';
 import GeneralAddScreen      from './src/screens/GeneralAddScreen';
 import ListItemEditScreen    from './src/screens/ListItemEditScreen';
 import OnboardingNameScreen  from './src/screens/OnboardingNameScreen';
+import AddPickerScreen       from './src/screens/AddPickerScreen';
+import MorePickerScreen      from './src/screens/MorePickerScreen';
 
 // Deep-link handler. `iita://invite/<code>` opens the app on JoinPair
 // with the code pre-filled. If the user isn't signed in yet, we stash
@@ -305,6 +307,16 @@ function App() {
                 <Stack.Screen
                   name="ListItemEdit"
                   component={ListItemEditScreen}
+                  options={drawerOptions}
+                />
+                <Stack.Screen
+                  name="AddPicker"
+                  component={AddPickerScreen}
+                  options={drawerOptions}
+                />
+                <Stack.Screen
+                  name="MorePicker"
+                  component={MorePickerScreen}
                   options={drawerOptions}
                 />
               </Stack.Navigator>

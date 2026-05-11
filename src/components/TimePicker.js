@@ -1,59 +1,61 @@
-// TimePicker — pick None / Morning / Noon / Night, or a custom start–end
-// range. Stores the value as a single string on the activity / event:
+// TimePicker — pick Morning / Noon / Night, or a Custom start–end range.
+// Stores a single string on the activity / event:
 //   ''  · 'morning' · 'noon' · 'night' · 'HH:MM-HH:MM'
 //
-// Used by ActivityEditScreen, AddEventScreen, and the WeekIntake preview.
+// Tap an active bucket to clear it. In Custom mode, tap a pill to edit
+// its time — the spinner opens in a Modal at the bottom of the screen
+// so it never gets obscured by surrounding content.
 
-import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  View, Text, TouchableOpacity, StyleSheet, Platform, Modal, Pressable,
+} from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-import { colors, fontFamily, spacing, radius } from '../theme';
-import { TIME_BUCKETS, timeKind, hhmm, dateFromHHMM, formatTime } from '../utils/time';
+import { colors, fontFamily, spacing, radius, useBottomInset } from '../theme';
+import { timeKind, hhmm, dateFromHHMM } from '../utils/time';
 
 const FF = fontFamily;
 
-const BUCKET_OPTS = [
-  { key: '',        label: 'None' },
+const BUCKETS = [
   { key: 'all day', label: 'All day' },
   { key: 'morning', label: 'Morning' },
   { key: 'noon',    label: 'Noon' },
   { key: 'night',   label: 'Night' },
-  { key: 'range',   label: 'Range' },
 ];
 
 export default function TimePicker({ value, onChange }) {
   const kind = timeKind(value); // 'empty' | 'bucket' | 'range' | 'free'
-  const isRangeMode = kind === 'range' || kind === 'free';
-  const activeKey = isRangeMode ? 'range' : (kind === 'bucket' ? value.toLowerCase() : '');
+  const isCustom = kind === 'range' || kind === 'free';
+  const activeBucket = kind === 'bucket' ? String(value).toLowerCase() : null;
 
-  const [showStart, setShowStart] = useState(false);
-  const [showEnd,   setShowEnd]   = useState(false);
+  // Which field's spinner is open: null | 'start' | 'end'
+  const [editing, setEditing] = useState(null);
 
   const { startStr, endStr } = useMemo(() => {
-    if (!isRangeMode) return { startStr: '09:00', endStr: '10:00' };
+    if (!isCustom) return { startStr: '09:00', endStr: '10:00' };
     const parts = String(value || '').split(/\s*[-–—]\s*/);
     return {
       startStr: normaliseToHHMM(parts[0]) || '09:00',
       endStr:   normaliseToHHMM(parts[1]) || '10:00',
     };
-  }, [value, isRangeMode]);
+  }, [value, isCustom]);
 
   function pickBucket(key) {
-    if (key === 'range') {
-      onChange(`${startStr}-${endStr}`);
-    } else {
-      onChange(key);
-    }
+    if (activeBucket === key) onChange(''); // tap active → clear
+    else onChange(key);
   }
 
-  function commitStart(d) {
-    if (Platform.OS === 'android') setShowStart(false);
+  function enterCustom() {
+    if (!isCustom) onChange(`${startStr}-${endStr}`);
+    setEditing('start');
+  }
+
+  function setStart(d) {
     if (!d) return;
     onChange(`${hhmm(d)}-${endStr}`);
   }
-  function commitEnd(d) {
-    if (Platform.OS === 'android') setShowEnd(false);
+  function setEnd(d) {
     if (!d) return;
     onChange(`${startStr}-${hhmm(d)}`);
   }
@@ -61,81 +63,123 @@ export default function TimePicker({ value, onChange }) {
   return (
     <View>
       <View style={s.bucketRow}>
-        {BUCKET_OPTS.map(opt => {
-          const active = activeKey === opt.key;
+        {BUCKETS.map(b => {
+          const active = activeBucket === b.key;
           return (
             <TouchableOpacity
-              key={opt.key || 'none'}
-              onPress={() => pickBucket(opt.key)}
+              key={b.key}
+              onPress={() => pickBucket(b.key)}
               activeOpacity={0.8}
               style={[s.bucket, active && s.bucketActive]}
             >
-              <Text style={[s.bucketText, active && s.bucketTextActive]}>{opt.label}</Text>
+              <Text style={[s.bucketText, active && s.bucketTextActive]}>{b.label}</Text>
             </TouchableOpacity>
           );
         })}
+        <TouchableOpacity
+          onPress={enterCustom}
+          activeOpacity={0.8}
+          style={[s.bucket, isCustom && s.bucketActive]}
+        >
+          <Text style={[s.bucketText, isCustom && s.bucketTextActive]}>Custom</Text>
+        </TouchableOpacity>
       </View>
 
-      {isRangeMode && (
+      {isCustom && (
         <View style={s.rangeRow}>
-          <RangeField
+          <TimePill
             label="Start"
             valueStr={startStr}
-            onPress={() => setShowStart(true)}
+            onPress={() => setEditing('start')}
+            active={editing === 'start'}
           />
           <Text style={s.rangeDash}>–</Text>
-          <RangeField
+          <TimePill
             label="End"
             valueStr={endStr}
-            onPress={() => setShowEnd(true)}
+            onPress={() => setEditing('end')}
+            active={editing === 'end'}
           />
+          <TouchableOpacity onPress={() => onChange('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={s.clearLink}>Clear</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {showStart && (
-        <DateTimePicker
-          value={dateFromHHMM(startStr)}
-          mode="time"
-          is24Hour
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(_, d) => commitStart(d)}
-          themeVariant="dark"
-        />
-      )}
-      {showEnd && (
-        <DateTimePicker
-          value={dateFromHHMM(endStr)}
-          mode="time"
-          is24Hour
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(_, d) => commitEnd(d)}
-          themeVariant="dark"
-        />
-      )}
-
-      {Platform.OS === 'ios' && (showStart || showEnd) && (
-        <TouchableOpacity
-          onPress={() => { setShowStart(false); setShowEnd(false); }}
-          style={s.doneBtn}
-          activeOpacity={0.7}
-        >
-          <Text style={s.doneLabel}>Done</Text>
-        </TouchableOpacity>
-      )}
-
-      {kind === 'free' && (
-        <Text style={s.freeNote}>Currently: {formatTime(value)}</Text>
-      )}
+      <PickerModal
+        visible={editing !== null}
+        title={editing === 'end' ? 'End time' : 'Start time'}
+        initial={editing === 'end' ? endStr : startStr}
+        onChange={(d) => { if (editing === 'end') setEnd(d); else setStart(d); }}
+        onClose={() => setEditing(null)}
+      />
     </View>
   );
 }
 
-function RangeField({ label, valueStr, onPress }) {
+function TimePill({ label, valueStr, onPress, active }) {
   return (
-    <TouchableOpacity onPress={onPress} style={s.rangeField} activeOpacity={0.7}>
-      <Text style={s.rangeLabel}>{label}</Text>
-      <Text style={s.rangeValue}>{valueStr}</Text>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      style={[s.pill, active && s.pillActive]}
+    >
+      <Text style={s.pillLabel}>{label}</Text>
+      <Text style={s.pillValue}>{valueStr}</Text>
     </TouchableOpacity>
+  );
+}
+
+// Bottom-sheet modal that hosts a single time spinner. Lives above
+// every other surface, so it can never be obscured by the form.
+function PickerModal({ visible, title, initial, onChange, onClose }) {
+  const bottomPad = useBottomInset(spacing.md);
+  const [draft, setDraft] = useState(() => dateFromHHMM(initial));
+
+  // Reset the draft when the modal re-opens for a different field.
+  useEffect(() => {
+    if (visible) setDraft(dateFromHHMM(initial));
+  }, [visible, initial]);
+
+  function commit() {
+    onChange(draft);
+    onClose();
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={s.modalBackdrop} onPress={onClose} />
+      <View style={[s.modalSheet, { paddingBottom: bottomPad }]} pointerEvents="box-none">
+        <View style={s.modalHandle} />
+        <Text style={s.modalTitle}>{title}</Text>
+        <View style={s.spinnerWrap}>
+          <DateTimePicker
+            value={draft}
+            mode="time"
+            is24Hour
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(_, d) => {
+              if (!d) return;
+              setDraft(d);
+              // Android picker dismisses itself after one pick — commit immediately.
+              if (Platform.OS === 'android') { onChange(d); onClose(); }
+            }}
+            themeVariant="dark"
+            textColor={colors.text}
+          />
+        </View>
+        {Platform.OS === 'ios' && (
+          <TouchableOpacity style={s.doneBtn} onPress={commit} activeOpacity={0.85}>
+            <Text style={s.doneLabel}>Done</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </Modal>
   );
 }
 
@@ -143,11 +187,10 @@ function normaliseToHHMM(s) {
   if (!s) return '';
   const m = String(s).trim().match(/^(\d{1,2}):?(\d{2})?$/);
   if (m) {
-    const h = String(Math.min(23, Math.max(0, parseInt(m[1], 10)))).padStart(2, '0');
-    const mm = m[2] ? String(Math.min(59, Math.max(0, parseInt(m[2], 10)))).padStart(2, '0') : '00';
+    const h = String(clamp(parseInt(m[1], 10), 0, 23)).padStart(2, '0');
+    const mm = m[2] ? String(clamp(parseInt(m[2], 10), 0, 59)).padStart(2, '0') : '00';
     return `${h}:${mm}`;
   }
-  // 12-hour like "9am" / "6:30pm"
   const m2 = String(s).trim().toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
   if (m2) {
     let h = parseInt(m2[1], 10);
@@ -158,6 +201,7 @@ function normaliseToHHMM(s) {
   }
   return '';
 }
+function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 
 const s = StyleSheet.create({
   bucketRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
@@ -167,21 +211,40 @@ const s = StyleSheet.create({
     backgroundColor: colors.surfaceLight,
   },
   bucketActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  bucketText: { color: colors.textMid, fontFamily: FF.medium, fontSize: 12, letterSpacing: 0.3 },
+  bucketText: { color: colors.textMid, fontFamily: FF.medium, fontSize: 13, letterSpacing: 0.3 },
   bucketTextActive: { color: colors.primary, fontFamily: FF.semibold },
 
   rangeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
-  rangeField: {
-    flex: 1, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.md,
+  pill: {
+    paddingHorizontal: spacing.md, paddingVertical: 8,
     borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: colors.surfaceLight, alignItems: 'center',
+    minWidth: 88,
   },
-  rangeLabel: { color: colors.textMuted, fontFamily: FF.light, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 },
-  rangeValue: { color: colors.text, fontFamily: FF.semibold, fontSize: 15 },
-  rangeDash:  { color: colors.textMuted, fontFamily: FF.regular, fontSize: 16 },
+  pillActive: { borderColor: colors.primary },
+  pillLabel: { color: colors.textMuted, fontFamily: FF.light, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6 },
+  pillValue: { color: colors.text, fontFamily: FF.semibold, fontSize: 16, marginTop: 1 },
+  rangeDash: { color: colors.textMuted, fontFamily: FF.regular, fontSize: 16 },
+  clearLink: { color: colors.textMuted, fontFamily: FF.medium, fontSize: 12, marginLeft: 'auto', textDecorationLine: 'underline' },
 
-  doneBtn: { alignSelf: 'flex-end', marginTop: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 6 },
-  doneLabel: { color: colors.primary, fontFamily: FF.semibold, fontSize: 13 },
-
-  freeNote: { color: colors.textMuted, fontFamily: FF.light, fontSize: 11, marginTop: spacing.sm, fontStyle: 'italic' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  modalSheet: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl,
+    borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border,
+    paddingTop: 8,
+  },
+  modalHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: colors.border, alignSelf: 'center', marginBottom: 6,
+  },
+  modalTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 14, textAlign: 'center', paddingVertical: spacing.sm },
+  spinnerWrap: { paddingHorizontal: spacing.md },
+  doneBtn: {
+    marginHorizontal: spacing.xl, marginTop: spacing.sm,
+    backgroundColor: colors.primary,
+    paddingVertical: 13, borderRadius: radius.pill, alignItems: 'center',
+  },
+  doneLabel: { color: '#000', fontFamily: FF.semibold, fontSize: 15 },
 });
