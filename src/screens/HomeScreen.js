@@ -4,14 +4,14 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fontFamily, spacing, radius, layout } from '../theme';
-import { getWeek, WEEKDAYS, emptyDay, getEvents, getList, getUserPrefs, setUserPrefs } from '../services/storageService';
+import { getWeek, WEEKDAYS, emptyDay, getEvents, getList, getUserPrefs, setUserPrefs, hydrateFromServer } from '../services/storageService';
 import OnboardingTour from '../components/OnboardingTour';
 import {
   isoWeekStart, shiftWeek, weekRangeLabel, fromISODate, addDays,
@@ -30,6 +30,7 @@ export default function HomeScreen({ navigation }) {
   const [events, setEvents] = useState([]);
   const [todos, setTodos] = useState([]);
   const [showTour, setShowTour] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -51,7 +52,28 @@ export default function HomeScreen({ navigation }) {
     setTodos(t);
   }, [weekStart]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await hydrateFromServer({ force: true });
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+
+  // On focus: show local immediately, then quietly pull from server
+  // and re-load. Closes the gap where the partner adds something on
+  // her phone — without a manual refresh it'd otherwise stay invisible
+  // until the next app boot.
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+    load();
+    hydrateFromServer({ force: true }).then((ok) => {
+      if (!cancelled && ok) load();
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [load]));
 
   const isEmpty = useMemo(() => {
     if (!week) return true;
@@ -107,7 +129,17 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={[s.body, { paddingBottom: spacing.xl }]}>
+      <ScrollView
+        contentContainerStyle={[s.body, { paddingBottom: spacing.xl }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         {isEmpty && (
           <>
             <TouchableOpacity

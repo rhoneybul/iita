@@ -7,14 +7,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, SectionList, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fontFamily, spacing, radius, layout } from '../theme';
-import { getEvents, deleteEvent } from '../services/storageService';
+import { getEvents, deleteEvent, hydrateFromServer } from '../services/storageService';
 import { MONTHS_LONG, fromISODate } from '../utils/dates';
 import { formatTime } from '../utils/time';
 import { labelOf } from '../data/labels';
@@ -43,15 +43,33 @@ export default function YearScreen({ navigation }) {
   // the right month, so the user never sees the list snap into place.
   const [revealed, setRevealed] = useState(false);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const load = useCallback(async () => {
     setEvents(await getEvents());
     setHasLoaded(true);
   }, []);
 
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await hydrateFromServer({ force: true });
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+
   useFocusEffect(useCallback(() => {
     setRevealed(false);
     setFocusKey(k => k + 1);
     load();
+    // Quiet background pull so partner's changes appear without a
+    // manual refresh. Failure here is silent — the local list is
+    // already displayed.
+    hydrateFromServer({ force: true }).then((ok) => {
+      if (ok) load();
+    }).catch(() => {});
   }, [load]));
 
   // Build sections — only months with events (so the list stays tight).
@@ -157,6 +175,14 @@ export default function YearScreen({ navigation }) {
         style={{ opacity: revealed ? 1 : 0 }}
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.md }}
         stickySectionHeadersEnabled={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
         renderSectionHeader={({ section }) => {
           const isCurrentMonth = section.monthIndex === todayMonth && year === todayYear;
           const isPastMonth = year < todayYear || (year === todayYear && section.monthIndex < todayMonth);
