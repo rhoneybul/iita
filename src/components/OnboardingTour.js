@@ -128,7 +128,7 @@ function IntakePreview() {
 
 function YearPreview() {
   const events = [
-    { day: 12, mo: 'JUN', title: 'George & Claire — wedding', label: 'social' },
+    { day: 12, mo: 'JUN', title: "A friend's wedding", label: 'social' },
     { day: 4,  mo: 'AUG', title: 'Morocco trip', label: 'travel' },
     { day: 22, mo: 'SEP', title: "Mum's birthday", label: 'important' },
   ];

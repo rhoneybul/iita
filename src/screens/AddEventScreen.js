@@ -113,7 +113,7 @@ export default function AddEventScreen({ route, navigation }) {
             style={s.input}
             value={title}
             onChangeText={setTitle}
-            placeholder="e.g. George Wedding — Morocco"
+            placeholder="e.g. Wedding in Morocco"
             placeholderTextColor={colors.textFaint}
             autoFocus={!isEdit}
             autoCorrect
@@ -189,7 +189,7 @@ export default function AddEventScreen({ route, navigation }) {
             style={s.input}
             value={withWho}
             onChangeText={setWithWho}
-            placeholder="e.g. with George & Claire"
+            placeholder="e.g. with friends"
             placeholderTextColor={colors.textFaint}
           />
         </View>
