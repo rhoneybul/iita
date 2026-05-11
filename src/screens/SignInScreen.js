@@ -12,7 +12,8 @@ import { colors, fontFamily, spacing, radius } from '../theme';
 import {
   signInWithGoogle, signInWithApple, onAuthStateChange, getSession, isSupabaseConfigured,
 } from '../services/authService';
-import { ensureUserData, hydrateFromServer } from '../services/storageService';
+import { ensureUserData, hydrateFromServer, getUserPrefs } from '../services/storageService';
+import IitaMark from '../components/IitaMark';
 
 const PENDING_INVITE_KEY = '@iita_pending_invite';
 
@@ -25,6 +26,8 @@ async function nextRouteAfterAuth() {
     await AsyncStorage.removeItem(PENDING_INVITE_KEY);
     return { name: 'JoinPair', params: { code } };
   }
+  const prefs = await getUserPrefs();
+  if (!prefs?.displayName) return { name: 'OnboardingName' };
   return { name: 'Home' };
 }
 
@@ -105,7 +108,9 @@ export default function SignInScreen({ navigation }) {
   return (
     <SafeAreaView style={s.root}>
       <Animated.View style={[s.body, { opacity: fade, transform: [{ translateY: slide }] }]}>
-        <Text style={s.wordmark}>iita</Text>
+        <View style={s.markWrap}>
+          <IitaMark size={140} idSuffix="signin" />
+        </View>
         <Text style={s.tagline}>Plan the week together</Text>
 
         <View style={s.buttons}>
@@ -150,7 +155,7 @@ export default function SignInScreen({ navigation }) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   body: { flex: 1, padding: spacing.xxl, justifyContent: 'center' },
-  wordmark: { fontSize: 64, color: colors.primary, fontFamily: FF.semibold, letterSpacing: 2, marginBottom: spacing.sm },
+  markWrap: { alignItems: 'flex-start', marginBottom: spacing.xl },
   tagline:  { fontSize: 16, color: colors.textMid, fontFamily: FF.regular, marginBottom: spacing.xxxl },
   buttons: { gap: spacing.md, marginTop: spacing.xl },
   btn: {

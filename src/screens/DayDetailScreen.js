@@ -17,6 +17,7 @@ import { getWeek, deleteActivity, emptyDay } from '../services/storageService';
 import { dayLabel } from '../utils/dates';
 import { sortActivities } from '../utils/time';
 import { labelOf } from '../data/labels';
+import { initialOf, colorForName } from '../utils/avatar';
 
 const FF = fontFamily;
 
@@ -108,6 +109,7 @@ export default function DayDetailScreen({ route, navigation }) {
 
 function ActivityRow({ activity, onPress, onLongPress }) {
   const lbl = labelOf(activity.label);
+  const initial = initialOf(activity.addedBy);
   return (
     <TouchableOpacity
       style={s.row}
@@ -135,6 +137,11 @@ function ActivityRow({ activity, onPress, onLongPress }) {
           )}
         </View>
       </View>
+      {initial ? (
+        <View style={[s.author, { borderColor: colorForName(activity.addedBy) }]}>
+          <Text style={[s.authorText, { color: colorForName(activity.addedBy) }]}>{initial}</Text>
+        </View>
+      ) : null}
       <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
     </TouchableOpacity>
   );
@@ -163,6 +170,13 @@ const s = StyleSheet.create({
   chipText: { fontFamily: FF.medium, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
   togetherChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.primaryLight },
   togetherText: { color: colors.primary, fontFamily: FF.medium, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  author: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  authorText: { fontFamily: FF.semibold, fontSize: 11, letterSpacing: 0.3 },
 
   addRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

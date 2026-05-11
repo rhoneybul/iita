@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, fontFamily, spacing, radius, useBottomInset } from '../theme';
 import { getList, saveListItem, deleteListItem } from '../services/storageService';
+import { labelOf } from '../data/labels';
 
 const FF = fontFamily;
 
@@ -157,6 +158,7 @@ export default function ChecklistScreen({ navigation, route }) {
               key={item.id}
               item={item}
               onToggle={() => toggle(item)}
+              onOpen={() => navigation.navigate('ListItemEdit', { kind, itemId: item.id })}
               onLongPress={() => confirmDelete(item)}
             />
           ))}
@@ -171,6 +173,7 @@ export default function ChecklistScreen({ navigation, route }) {
                   key={item.id}
                   item={item}
                   onToggle={() => toggle(item)}
+                  onOpen={() => navigation.navigate('ListItemEdit', { kind, itemId: item.id })}
                   onLongPress={() => confirmDelete(item)}
                 />
               ))}
@@ -182,22 +185,39 @@ export default function ChecklistScreen({ navigation, route }) {
   );
 }
 
-function Row({ item, onToggle, onLongPress }) {
+function Row({ item, onToggle, onOpen, onLongPress }) {
+  const lbl = labelOf(item.label);
   return (
-    <TouchableOpacity
-      style={[s.row, item.done && s.rowDone]}
-      onPress={onToggle}
-      onLongPress={onLongPress}
-      delayLongPress={350}
-      activeOpacity={0.7}
-    >
-      <Ionicons
-        name={item.done ? 'checkmark-circle' : 'ellipse-outline'}
-        size={22}
-        color={item.done ? colors.good : colors.textMuted}
-      />
-      <Text style={[s.rowText, item.done && s.rowTextDone]}>{item.title}</Text>
-    </TouchableOpacity>
+    <View style={[s.row, item.done && s.rowDone]}>
+      <TouchableOpacity
+        onPress={onToggle}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        activeOpacity={0.7}
+      >
+        <Ionicons
+          name={item.done ? 'checkmark-circle' : 'ellipse-outline'}
+          size={22}
+          color={item.done ? colors.good : colors.textMuted}
+        />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={s.rowBody}
+        onPress={onOpen}
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        activeOpacity={0.7}
+      >
+        <Text style={[s.rowText, item.done && s.rowTextDone]} numberOfLines={2}>{item.title}</Text>
+        {item.notes ? (
+          <Text style={[s.rowNotes, item.done && s.rowTextDone]} numberOfLines={1}>{item.notes}</Text>
+        ) : null}
+      </TouchableOpacity>
+      {lbl && (
+        <View style={[s.chip, { backgroundColor: lbl.bg }]}>
+          <Text style={[s.chipText, { color: lbl.color }]}>{lbl.name}</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -230,8 +250,12 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
   },
   rowDone: { opacity: 0.55 },
-  rowText: { flex: 1, color: colors.text, fontFamily: FF.regular, fontSize: 15, lineHeight: 20 },
+  rowBody: { flex: 1, gap: 2 },
+  rowText: { color: colors.text, fontFamily: FF.regular, fontSize: 15, lineHeight: 20 },
+  rowNotes: { color: colors.textMuted, fontFamily: FF.light, fontSize: 12, lineHeight: 16 },
   rowTextDone: { textDecorationLine: 'line-through', color: colors.textMuted },
+  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  chipText: { fontFamily: FF.medium, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 },
 
   sectionLabel: { color: colors.textMuted, fontFamily: FF.medium, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.lg, marginBottom: spacing.sm },
 

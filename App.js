@@ -57,7 +57,7 @@ import LoadingSplash from './src/components/LoadingSplash';
 import WebWrapper from './src/components/WebWrapper';
 import analytics from './src/services/analyticsService';
 import { getSession, getCurrentUser, signOut, onAuthStateChange } from './src/services/authService';
-import { ensureUserData, hydrateFromServer } from './src/services/storageService';
+import { ensureUserData, hydrateFromServer, getUserPrefs } from './src/services/storageService';
 
 import SignInScreen          from './src/screens/SignInScreen';
 import HomeScreen            from './src/screens/HomeScreen';
@@ -70,6 +70,9 @@ import InvitePartnerScreen   from './src/screens/InvitePartnerScreen';
 import JoinPairScreen        from './src/screens/JoinPairScreen';
 import ChecklistScreen       from './src/screens/ChecklistScreen';
 import ActivityEditScreen    from './src/screens/ActivityEditScreen';
+import GeneralAddScreen      from './src/screens/GeneralAddScreen';
+import ListItemEditScreen    from './src/screens/ListItemEditScreen';
+import OnboardingNameScreen  from './src/screens/OnboardingNameScreen';
 
 // Deep-link handler. `iita://invite/<code>` opens the app on JoinPair
 // with the code pre-filled. If the user isn't signed in yet, we stash
@@ -168,7 +171,8 @@ function App() {
         const cleared = await ensureUserData(session.user?.id);
         await hydrateFromServer({ force: cleared });
 
-        setInitialRoute('Home');
+        const prefs = await getUserPrefs();
+        setInitialRoute(prefs?.displayName ? 'Home' : 'OnboardingName');
       } else {
         setInitialRoute('SignIn');
       }
@@ -243,6 +247,7 @@ function App() {
                 }}
               >
                 <Stack.Screen name="SignIn"      component={SignInScreen} />
+                <Stack.Screen name="OnboardingName" component={OnboardingNameScreen} />
                 <Stack.Screen name="Home"        component={HomeScreen} />
                 <Stack.Screen
                   name="WeekIntake"
@@ -253,7 +258,12 @@ function App() {
                 <Stack.Screen
                   name="ActivityEdit"
                   component={ActivityEditScreen}
-                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                  options={{
+                    gestureDirection: 'vertical',
+                    cardStyleInterpolator: slideUp,
+                    cardStyle: { backgroundColor: 'transparent' },
+                    cardOverlayEnabled: true,
+                  }}
                 />
                 <Stack.Screen name="Year"        component={YearScreen} />
                 <Stack.Screen
@@ -281,6 +291,16 @@ function App() {
                   name="Wishlist"
                   component={ChecklistScreen}
                   initialParams={{ kind: 'wish' }}
+                />
+                <Stack.Screen
+                  name="GeneralAdd"
+                  component={GeneralAddScreen}
+                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
+                />
+                <Stack.Screen
+                  name="ListItemEdit"
+                  component={ListItemEditScreen}
+                  options={{ gestureDirection: 'vertical', cardStyleInterpolator: slideUp }}
                 />
               </Stack.Navigator>
             </NavigationContainer>

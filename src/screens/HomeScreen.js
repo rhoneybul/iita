@@ -19,8 +19,8 @@ import {
 } from '../utils/dates';
 import { sortActivities } from '../utils/time';
 import { labelOf } from '../data/labels';
+import { initialOf, colorForName } from '../utils/avatar';
 import BottomNav from '../components/BottomNav';
-import IitaMark from '../components/IitaMark';
 
 const FF = fontFamily;
 
@@ -91,11 +91,8 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={s.root} edges={['top']}>
       <View style={s.brandBar}>
         <View style={s.brandLeft}>
-          <IitaMark size={32} idSuffix="home" />
-          <View>
-            <Text style={s.wordmark}>iita</Text>
-            <Text style={s.tagline}>Plan the week together</Text>
-          </View>
+          <Text style={s.wordmark}>iita</Text>
+          <Text style={s.tagline}>Plan the week together</Text>
         </View>
         <TouchableOpacity onPress={openMore} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="ellipsis-horizontal" size={22} color={colors.textMid} />
@@ -235,6 +232,7 @@ export default function HomeScreen({ navigation }) {
 
               {acts.map(a => {
                 const lbl = labelOf(a.label);
+                const initial = initialOf(a.addedBy);
                 return (
                   <TouchableOpacity key={a.id} style={s.actLine} onPress={openDay} activeOpacity={0.7}>
                     <View style={s.actTimeCol}>
@@ -252,6 +250,11 @@ export default function HomeScreen({ navigation }) {
                           <Text style={[s.actChipText, { color: lbl.color }]}>{lbl.name}</Text>
                         </View>
                       )}
+                      {initial ? (
+                        <View style={[s.actAuthor, { borderColor: colorForName(a.addedBy) }]}>
+                          <Text style={[s.actAuthorText, { color: colorForName(a.addedBy) }]}>{initial}</Text>
+                        </View>
+                      ) : null}
                     </View>
                   </TouchableOpacity>
                 );
@@ -273,12 +276,12 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.md,
   },
-  brandLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  brandLeft: { flexDirection: 'column' },
   wordmark: {
     fontSize: 28, color: colors.primary, fontFamily: FF.semibold,
     letterSpacing: 1.5, lineHeight: 32,
   },
-  tagline: { color: colors.textMuted, fontFamily: FF.light, fontSize: 11, marginTop: 1 },
+  tagline: { color: colors.textMuted, fontFamily: FF.light, fontSize: 15, marginTop: 1 },
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 16, textAlign: 'center' },
@@ -360,4 +363,9 @@ const s = StyleSheet.create({
   actMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   actChip: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999 },
   actChipText: { fontFamily: FF.medium, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.4 },
+  actAuthor: {
+    width: 18, height: 18, borderRadius: 9,
+    borderWidth: 1.25, alignItems: 'center', justifyContent: 'center',
+  },
+  actAuthorText: { fontFamily: FF.semibold, fontSize: 10, letterSpacing: 0.2 },
 });

@@ -1,10 +1,24 @@
 # Assets
 
-This folder needs four images before you build for the stores:
+These PNGs are committed and ship in the build. To regenerate them from
+the source SVG mark:
 
-- `icon.png` — 1024×1024, square, opaque. App store icon.
-- `adaptive-icon.png` — 1024×1024, Android adaptive icon foreground (keep important content within the inner 66% so the OS mask doesn't crop it).
-- `splash.png` — centered logo on a transparent or black background; the app renders this with `resizeMode: contain`.
-- `favicon.png` — 32×32, for the web build.
+```sh
+npm install --no-save @resvg/resvg-js
+node scripts/render-assets.mjs
+```
 
-Until these exist, `LoadingSplash.js` falls back to a wordmark on a black screen and the app boots fine — but the splash plugin in `app.json` will warn during `eas build`. Drop the four PNGs in here when you're ready.
+The script reads its geometry from `scripts/render-assets.mjs` and writes:
+
+- `icon.png` — 1024×1024 store / iOS icon, opaque black bg.
+- `adaptive-icon.png` — 1024×1024 Android adaptive foreground (transparent, mark inside the 66% safe area).
+- `splash.png` / `splash-android.png` — 1024×1024 centred mark, transparent bg. `app.json` renders these with `resizeMode: contain` on a black field.
+- `favicon.png` — 64×64 for the web build (no "i" mark — sub-pixel at this scale).
+- `icon.svg` — the source SVG, kept here for tools that prefer it.
+
+The in-app rendering of the same mark lives in `src/components/IitaMark.js`
+(react-native-svg). The two should stay in sync — when you tweak the
+geometry in one, update the other.
+
+The design exploration that produced this direction is in `design/`
+(JSX previewers that load in a browser via the bundled HTML files).

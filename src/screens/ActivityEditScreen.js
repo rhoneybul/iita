@@ -1,22 +1,22 @@
-// Add / edit one activity. Opens as a slide-up modal from DayDetail.
-// Fields: title (required), time (optional free-text), label (one-tap
-// chip), together (toggle). Bottom-pinned save; delete sits below for
-// existing activities.
+// Add / edit one activity. Renders as a bottom drawer over DayDetail —
+// the route's `cardStyleInterpolator: slideUp` + `cardStyle: transparent`
+// in App.js animate the slide and keep the previous screen visible
+// beneath. Tapping the backdrop dismisses.
 
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  KeyboardAvoidingView, Platform, Switch,
+  KeyboardAvoidingView, Platform, Switch, Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, fontFamily, spacing, radius, layout, useBottomInset } from '../theme';
+import { colors, fontFamily, spacing, radius, useBottomInset } from '../theme';
 import { getWeek, saveActivity, deleteActivity, emptyDay } from '../services/storageService';
 import { dayLabel } from '../utils/dates';
 import { LABELS, LABEL_ORDER } from '../data/labels';
 
 const FF = fontFamily;
+const HIT = { top: 12, bottom: 12, left: 12, right: 12 };
 
 export default function ActivityEditScreen({ route, navigation }) {
   const { weekStart, day, activityId } = route.params;
@@ -25,10 +25,12 @@ export default function ActivityEditScreen({ route, navigation }) {
   const [title, setTitle]       = useState('');
   const [time, setTime]         = useState('');
   const [label, setLabel]       = useState('');
+  const [notes, setNotes]       = useState('');
   const [together, setTogether] = useState(false);
   const [loaded, setLoaded]     = useState(!isEdit);
 
-  const bottomPad = useBottomInset(spacing.xl);
+  const bottomPad = useBottomInset(spacing.lg);
+  const footerPad = useBottomInset(spacing.md);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -40,6 +42,7 @@ export default function ActivityEditScreen({ route, navigation }) {
         setTitle(a.title);
         setTime(a.time || '');
         setLabel(a.label || '');
+        setNotes(a.notes || '');
         setTogether(!!a.together);
       }
       setLoaded(true);
@@ -55,6 +58,7 @@ export default function ActivityEditScreen({ route, navigation }) {
       title: title.trim(),
       time: time.trim(),
       label,
+      notes: notes.trim() || null,
       together,
     });
     navigation.goBack();
@@ -67,115 +71,172 @@ export default function ActivityEditScreen({ route, navigation }) {
   }
 
   return (
-    <SafeAreaView style={s.root} edges={['top']}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="close" size={22} color={colors.textMid} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>{isEdit ? 'Edit activity' : 'Add activity'}</Text>
-        <TouchableOpacity onPress={save} disabled={!canSave} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Text style={[s.headerAction, !canSave && { color: colors.textFaint }]}>Save</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={s.root}>
+      <Pressable style={s.backdrop} onPress={() => navigation.goBack()} />
+      <KeyboardAvoidingView
+        style={s.sheetWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        pointerEvents="box-none"
+      >
+        <View style={s.sheet}>
+          <View style={s.handle} />
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={[s.body, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled">
-          <Text style={s.dayLine}>{dayLabel(weekStart, day)}</Text>
-
-          {/* Title */}
-          <View style={s.field}>
-            <Text style={s.fieldLabel}>What is it?</Text>
-            <TextInput
-              style={s.input}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="e.g. Cycling with Ollie"
-              placeholderTextColor={colors.textFaint}
-              autoFocus={!isEdit}
-              autoCorrect
-            />
-          </View>
-
-          {/* Time */}
-          <View style={s.field}>
-            <Text style={s.fieldLabel}>Time  <Text style={s.fieldHint}>optional</Text></Text>
-            <TextInput
-              style={s.input}
-              value={time}
-              onChangeText={setTime}
-              placeholder="9am · 18:30 · evening"
-              placeholderTextColor={colors.textFaint}
-              autoCorrect={false}
-              autoCapitalize="none"
-            />
-          </View>
-
-          {/* Label */}
-          <View style={s.field}>
-            <Text style={s.fieldLabel}>Label  <Text style={s.fieldHint}>optional</Text></Text>
-            <View style={s.chipRow}>
-              {LABEL_ORDER.map(key => {
-                const cfg = LABELS[key];
-                const active = label === key;
-                return (
-                  <TouchableOpacity
-                    key={key}
-                    onPress={() => setLabel(active ? '' : key)}
-                    activeOpacity={0.8}
-                    style={[
-                      s.chip,
-                      { borderColor: cfg.color },
-                      active && { backgroundColor: cfg.bg },
-                    ]}
-                  >
-                    <Text style={[s.chipText, { color: cfg.color }]}>{cfg.name}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Together */}
-          <View style={[s.field, s.toggleField]}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.fieldLabel}>Together</Text>
-              <Text style={s.toggleHint}>Are you doing this with your partner?</Text>
-            </View>
-            <Switch
-              value={together}
-              onValueChange={setTogether}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={Platform.OS === 'android' ? (together ? '#fff' : colors.textMuted) : undefined}
-              ios_backgroundColor={colors.border}
-            />
-          </View>
-
-          {/* Delete */}
-          {isEdit && (
-            <TouchableOpacity style={s.deleteBtn} onPress={remove} activeOpacity={0.7}>
-              <Ionicons name="trash-outline" size={16} color={colors.warn} />
-              <Text style={s.deleteLabel}>Delete activity</Text>
+          <View style={s.headerRow}>
+            <Text style={s.headerTitle}>{isEdit ? 'Edit activity' : 'Add activity'}</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={HIT} accessibilityLabel="Close">
+              <Ionicons name="close" size={20} color={colors.textMid} />
             </TouchableOpacity>
-          )}
-        </ScrollView>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={[s.body, { paddingBottom: bottomPad }]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={s.dayLine}>{dayLabel(weekStart, day)}</Text>
+
+            <View style={s.field}>
+              <Text style={s.fieldLabel}>What is it?</Text>
+              <TextInput
+                style={s.input}
+                value={title}
+                onChangeText={setTitle}
+                placeholder="e.g. Cycling with Ollie"
+                placeholderTextColor={colors.textFaint}
+                autoFocus={!isEdit}
+                autoCorrect
+              />
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.fieldLabel}>Time  <Text style={s.fieldHint}>optional</Text></Text>
+              <TextInput
+                style={s.input}
+                value={time}
+                onChangeText={setTime}
+                placeholder="9am · 18:30 · evening"
+                placeholderTextColor={colors.textFaint}
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.fieldLabel}>Label  <Text style={s.fieldHint}>optional</Text></Text>
+              <View style={s.chipRow}>
+                {LABEL_ORDER.map(key => {
+                  const cfg = LABELS[key];
+                  const active = label === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setLabel(active ? '' : key)}
+                      activeOpacity={0.8}
+                      style={[
+                        s.chip,
+                        { borderColor: cfg.color },
+                        active && { backgroundColor: cfg.bg },
+                      ]}
+                    >
+                      <Text style={[s.chipText, { color: cfg.color }]}>{cfg.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.fieldLabel}>Notes  <Text style={s.fieldHint}>optional</Text></Text>
+              <TextInput
+                style={[s.input, s.inputMulti]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Anything to remember about it…"
+                placeholderTextColor={colors.textFaint}
+                multiline
+                textAlignVertical="top"
+                autoCorrect
+              />
+            </View>
+
+            <View style={[s.field, s.toggleField]}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.fieldLabel}>Together</Text>
+                <Text style={s.toggleHint}>Are you doing this with your partner?</Text>
+              </View>
+              <Switch
+                value={together}
+                onValueChange={setTogether}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={Platform.OS === 'android' ? (together ? '#fff' : colors.textMuted) : undefined}
+                ios_backgroundColor={colors.border}
+              />
+            </View>
+
+            {isEdit && (
+              <TouchableOpacity style={s.deleteBtn} onPress={remove} activeOpacity={0.7}>
+                <Ionicons name="trash-outline" size={16} color={colors.warn} />
+                <Text style={s.deleteLabel}>Delete activity</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+
+          <View style={[s.footer, { paddingBottom: footerPad }]}>
+            <TouchableOpacity
+              style={[s.saveBtn, !canSave && s.saveBtnDisabled]}
+              onPress={save}
+              disabled={!canSave}
+              activeOpacity={0.85}
+            >
+              <Text style={s.saveBtnText}>{isEdit ? 'Save' : 'Add'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 15 },
-  headerAction: { color: colors.primary, fontFamily: FF.semibold, fontSize: 14 },
+  root: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject },
+  sheetWrap: { width: '100%' },
 
-  body: { padding: spacing.xl, gap: spacing.lg },
-  dayLine: { color: colors.textMuted, fontFamily: FF.medium, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8 },
+  sheet: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    maxHeight: '88%',
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: colors.border,
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center', marginTop: 10, marginBottom: 8,
+  },
 
-  field: { ...layout.card({ padding: spacing.lg, borderWidth: 1, borderColor: colors.border }) },
-  fieldLabel: { color: colors.text, fontFamily: FF.semibold, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.sm },
+  headerRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl, paddingBottom: spacing.md,
+  },
+  headerTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 16 },
+
+  body: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl, gap: spacing.lg },
+  dayLine: { color: colors.textMuted, fontFamily: FF.medium, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8 },
+
+  field: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  fieldLabel: { color: colors.text, fontFamily: FF.semibold, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.sm },
   fieldHint:  { color: colors.textMuted, fontFamily: FF.light, fontSize: 11, textTransform: 'none', letterSpacing: 0 },
   input: { color: colors.text, fontFamily: FF.regular, fontSize: 16, paddingVertical: spacing.sm },
+  inputMulti: { minHeight: 70, lineHeight: 22 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: 4 },
   chip: {
@@ -189,8 +250,21 @@ const s = StyleSheet.create({
 
   deleteBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, paddingVertical: 14, marginTop: spacing.md,
-    borderRadius: radius.md, borderWidth: 1, borderColor: colors.warnBorder || colors.warn,
+    gap: spacing.sm, paddingVertical: 12,
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.warn,
   },
   deleteLabel: { color: colors.warn, fontFamily: FF.semibold, fontSize: 14 },
+
+  footer: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    borderTopWidth: 1, borderTopColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  saveBtn: {
+    backgroundColor: colors.primary, borderRadius: radius.pill,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  saveBtnDisabled: { opacity: 0.4 },
+  saveBtnText: { color: '#000', fontFamily: FF.semibold, fontSize: 15 },
 });

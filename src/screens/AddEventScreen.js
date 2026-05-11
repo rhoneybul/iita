@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fontFamily, spacing, radius, layout, useBottomInset } from '../theme';
 import { saveEvent, deleteEvent, getEvents } from '../services/storageService';
 import { toISODate, fromISODate, MONTHS_SHORT } from '../utils/dates';
+import { LABELS, LABEL_ORDER } from '../data/labels';
 
 const FF = fontFamily;
 
@@ -29,6 +30,8 @@ export default function AddEventScreen({ route, navigation }) {
   const [endDate, setEndDate]   = useState(new Date(initialYear, new Date().getMonth(), new Date().getDate()));
   const [withWho, setWithWho]   = useState('');
   const [location, setLocation] = useState('');
+  const [label, setLabel]       = useState('');
+  const [notes, setNotes]       = useState('');
   const [done, setDone]         = useState(false);
   const [showStart, setShowStart] = useState(Platform.OS === 'ios');
   const [showEnd,   setShowEnd]   = useState(Platform.OS === 'ios');
@@ -51,6 +54,8 @@ export default function AddEventScreen({ route, navigation }) {
       }
       setWithWho(e.withWho || '');
       setLocation(e.location || '');
+      setLabel(e.label || '');
+      setNotes(e.notes || '');
       setDone(!!e.done);
     })();
   }, [isEdit, eventId]);
@@ -64,6 +69,8 @@ export default function AddEventScreen({ route, navigation }) {
       endDate: hasEnd ? toISODate(endDate) : undefined,
       withWho: withWho.trim() || undefined,
       location: location.trim() || undefined,
+      label: label || undefined,
+      notes: notes.trim() || undefined,
       done,
     });
     navigation.goBack();
@@ -177,6 +184,40 @@ export default function AddEventScreen({ route, navigation }) {
             />
           </View>
 
+          <View style={s.field}>
+            <Text style={s.fieldLabel}>Label  <Text style={s.fieldHint}>optional</Text></Text>
+            <View style={s.chipRow}>
+              {LABEL_ORDER.map(key => {
+                const cfg = LABELS[key];
+                const active = label === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => setLabel(active ? '' : key)}
+                    activeOpacity={0.8}
+                    style={[s.chip, { borderColor: cfg.color }, active && { backgroundColor: cfg.bg }]}
+                  >
+                    <Text style={[s.chipText, { color: cfg.color }]}>{cfg.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={s.field}>
+            <Text style={s.fieldLabel}>Notes  <Text style={s.fieldHint}>optional</Text></Text>
+            <TextInput
+              style={[s.input, s.inputMulti]}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Anything to remember about it…"
+              placeholderTextColor={colors.textFaint}
+              multiline
+              textAlignVertical="top"
+              autoCorrect
+            />
+          </View>
+
           {isEdit && (
             <>
               <TouchableOpacity
@@ -216,6 +257,11 @@ const s = StyleSheet.create({
   fieldLabel: { color: colors.text, fontFamily: FF.semibold, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.sm },
   fieldHint: { color: colors.textMuted, fontFamily: FF.light, fontSize: 11, textTransform: 'none', letterSpacing: 0 },
   input: { color: colors.text, fontFamily: FF.regular, fontSize: 16, paddingVertical: spacing.sm },
+  inputMulti: { minHeight: 80, lineHeight: 22 },
+
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: 4 },
+  chip: { paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1 },
+  chipText: { fontFamily: FF.semibold, fontSize: 12, letterSpacing: 0.3 },
 
   dateBtn: { paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceLight },
   dateBtnText: { color: colors.text, fontFamily: FF.medium, fontSize: 14 },

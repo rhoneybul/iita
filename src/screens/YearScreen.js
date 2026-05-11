@@ -6,15 +6,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, SectionList, TouchableOpacity, StyleSheet, Alert,
-  Platform, ActionSheetIOS,
+  Platform, ActionSheetIOS, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, fontFamily, spacing, radius, layout, useBottomInset } from '../theme';
+import { colors, fontFamily, spacing, radius, layout } from '../theme';
 import { getEvents, deleteEvent, saveEvent } from '../services/storageService';
 import { MONTHS_LONG, fromISODate } from '../utils/dates';
+import { labelOf } from '../data/labels';
+import BottomNav from '../components/BottomNav';
 
 const FF = fontFamily;
 
@@ -22,19 +24,33 @@ export default function YearScreen({ navigation }) {
   const [events, setEvents] = useState([]);
   const [year, setYear] = useState(new Date().getFullYear());
   const [hasLoaded, setHasLoaded] = useState(false);
-  const bottomPad = useBottomInset(spacing.xl);
+
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const todayMonth = today.getMonth();
+  const todayYear = today.getFullYear();
 
   const listRef = useRef(null);
-  // We only auto-scroll once per (mount, year change to current). After
-  // the user has scrolled, leave them where they are.
-  const didAutoScroll = useRef(false);
+  // Bumped on every focus so the auto-scroll effect re-runs when the
+  // screen is re-entered (state alone wouldn't change between visits).
+  const [focusKey, setFocusKey] = useState(0);
+  // List stays invisible (behind a spinner) until we've scrolled to
+  // the right month, so the user never sees the list snap into place.
+  const [revealed, setRevealed] = useState(false);
 
   const load = useCallback(async () => {
     setEvents(await getEvents());
     setHasLoaded(true);
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    setRevealed(false);
+    setFocusKey(k => k + 1);
+    load();
+  }, [load]));
 
   // Build sections — only months with events (so the list stays tight).
   // currentMonthIndex tells us which section to scroll to.
@@ -64,34 +80,37 @@ export default function YearScreen({ navigation }) {
     return { sections: built, currentSectionIdx: idx };
   }, [events, year]);
 
-  // ── Auto-scroll to "now" on first load ──
+  // ── Auto-scroll to "now" on focus ──
+  // The list is rendered with opacity 0 until we've scrolled, then
+  // revealed — so the user never sees a January-flash. The slide-in
+  // navigation transition is still running for the first ~300ms after
+  // mount, and SectionList layout isn't ready that early, so we
+  // schedule a couple of attempts before flipping the reveal.
   useEffect(() => {
     if (!hasLoaded) return;
-    if (didAutoScroll.current) return;
-    if (currentSectionIdx < 0) return;
-    if (sections.length === 0) return;
-    // setTimeout because SectionList needs a render pass before
-    // scrollToLocation can compute layout. Animated:false because we
-    // want to land there, not animate from the top.
-    const t = setTimeout(() => {
+    if (currentSectionIdx < 0 || sections.length === 0) {
+      // Nothing to auto-scroll to (empty year, or not the current year) —
+      // just reveal the list as-is.
+      const t = setTimeout(() => setRevealed(true), 60);
+      return () => clearTimeout(t);
+    }
+    const targetIdx = currentSectionIdx;
+    const scroll = () => {
       try {
         listRef.current?.scrollToLocation({
-          sectionIndex: currentSectionIdx,
+          sectionIndex: targetIdx,
           itemIndex: 0,
           animated: false,
           viewPosition: 0,
         });
-        didAutoScroll.current = true;
       } catch {
-        /* swallowed — onScrollToIndexFailed handles retry */
+        /* onScrollToIndexFailed handles retry */
       }
-    }, 80);
-    return () => clearTimeout(t);
-  }, [hasLoaded, currentSectionIdx, sections.length]);
-
-  // Reset auto-scroll guard when the user changes year (so jumping
-  // forward then back re-snaps to today).
-  useEffect(() => { didAutoScroll.current = false; }, [year]);
+    };
+    const scrolls = [60, 220, 400].map(ms => setTimeout(scroll, ms));
+    const revealT = setTimeout(() => setRevealed(true), 450);
+    return () => { scrolls.forEach(clearTimeout); clearTimeout(revealT); };
+  }, [hasLoaded, currentSectionIdx, sections.length, focusKey, year]);
 
   // ── Event actions ──
   async function toggleDone(ev) {
@@ -101,6 +120,17 @@ export default function YearScreen({ navigation }) {
   async function remove(ev) {
     await deleteEvent(ev.id);
     load();
+  }
+
+  function confirmRemove(ev) {
+    Alert.alert(
+      'Delete this?',
+      ev.title,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => remove(ev) },
+      ],
+    );
   }
 
   function openEdit(ev) {
@@ -138,9 +168,6 @@ export default function YearScreen({ navigation }) {
   return (
     <SafeAreaView style={s.root} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="chevron-back" size={22} color={colors.textMid} />
-        </TouchableOpacity>
         <View style={s.yearSwitch}>
           <TouchableOpacity onPress={() => setYear(y => y - 1)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 8 }}>
             <Ionicons name="chevron-back" size={18} color={colors.textMuted} />
@@ -150,51 +177,70 @@ export default function YearScreen({ navigation }) {
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => navigation.navigate('AddEvent', { year })} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="add" size={26} color={colors.primary} />
-        </TouchableOpacity>
       </View>
 
-      <SectionList
+      <View style={{ flex: 1 }}>
+        <SectionList
         ref={listRef}
         sections={sections}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: spacing.xl, paddingBottom: bottomPad + 40, gap: spacing.md }}
+        style={{ opacity: revealed ? 1 : 0 }}
+        contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.md }}
         stickySectionHeadersEnabled={false}
-        renderSectionHeader={({ section }) => (
-          <View style={s.monthHead}>
-            <Text style={s.month}>{section.title}</Text>
-            {section.monthIndex === new Date().getMonth() && year === new Date().getFullYear() && (
-              <Text style={s.nowChip}>now</Text>
-            )}
-          </View>
-        )}
+        renderSectionHeader={({ section }) => {
+          const isCurrentMonth = section.monthIndex === todayMonth && year === todayYear;
+          const isPastMonth = year < todayYear || (year === todayYear && section.monthIndex < todayMonth);
+          return (
+            <View style={s.monthHead}>
+              <Text style={[s.month, isPastMonth && s.monthPast]}>{section.title}</Text>
+              {isCurrentMonth && <Text style={s.nowChip}>now</Text>}
+            </View>
+          );
+        }}
         renderSectionFooter={() => <View style={{ height: spacing.md }} />}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[s.row, item.done && s.rowDone]}
-            onPress={() => handleEventPress(item)}
-            activeOpacity={0.7}
-          >
-            <View style={s.dateCol}>
-              <Text style={[s.dateDay, item.done && s.textDone]}>{fromISODate(item.date)?.getDate()}</Text>
-              {item.endDate && item.endDate !== item.date && (
-                <Text style={[s.dateRange, item.done && s.textDone]}>– {fromISODate(item.endDate)?.getDate()}</Text>
+        renderItem={({ item }) => {
+          const evEnd = fromISODate(item.endDate || item.date);
+          const isPast = !!evEnd && evEnd < today && !item.done;
+          const faded = item.done || isPast;
+          const lbl = labelOf(item.label);
+          return (
+            <TouchableOpacity
+              style={[s.row, faded && s.rowFaded]}
+              onPress={() => handleEventPress(item)}
+              activeOpacity={0.7}
+            >
+              <View style={s.dateCol}>
+                <Text style={[s.dateDay, faded && s.textDone]}>{fromISODate(item.date)?.getDate()}</Text>
+                {item.endDate && item.endDate !== item.date && (
+                  <Text style={[s.dateRange, faded && s.textDone]}>– {fromISODate(item.endDate)?.getDate()}</Text>
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.title, item.done && s.titleDone, isPast && s.textDone]} numberOfLines={2}>{item.title}</Text>
+                {(item.location || item.withWho) && (
+                  <Text style={[s.meta, faded && s.textDone]} numberOfLines={1}>
+                    {[item.withWho, item.location].filter(Boolean).join(' · ')}
+                  </Text>
+                )}
+              </View>
+              {lbl && (
+                <View style={[s.chip, { backgroundColor: lbl.bg }]}>
+                  <Text style={[s.chipText, { color: lbl.color }]}>{lbl.name}</Text>
+                </View>
               )}
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.title, item.done && s.titleDone]} numberOfLines={2}>{item.title}</Text>
-              {(item.location || item.withWho) && (
-                <Text style={[s.meta, item.done && s.textDone]} numberOfLines={1}>
-                  {[item.withWho, item.location].filter(Boolean).join(' · ')}
-                </Text>
+              {item.done && (
+                <Ionicons name="checkmark-circle" size={20} color={colors.good} />
               )}
-            </View>
-            {item.done && (
-              <Ionicons name="checkmark-circle" size={20} color={colors.good} />
-            )}
-          </TouchableOpacity>
-        )}
+              <TouchableOpacity
+                onPress={() => confirmRemove(item)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={s.trashBtn}
+              >
+                <Ionicons name="trash-outline" size={16} color={colors.textFaint} />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          );
+        }}
         ListEmptyComponent={(
           <View style={s.empty}>
             <Text style={s.emptyTitle}>Nothing in {year}</Text>
@@ -202,10 +248,10 @@ export default function YearScreen({ navigation }) {
           </View>
         )}
         // When the auto-scroll target hasn't been measured yet, RN
-        // throws and calls this. Estimate the offset and retry once,
-        // then leave the user alone.
+        // throws and calls this. Estimate the offset, scroll there to
+        // force the target to mount, then retry the precise scroll.
         onScrollToIndexFailed={(info) => {
-          if (didAutoScroll.current) return;
+          if (currentSectionIdx < 0) return;
           const offset = info.averageItemLength * info.index;
           listRef.current?.scrollToOffset({ offset, animated: false });
           setTimeout(() => {
@@ -214,12 +260,21 @@ export default function YearScreen({ navigation }) {
                 sectionIndex: currentSectionIdx,
                 itemIndex: 0,
                 animated: false,
+                viewPosition: 0,
               });
             } catch {}
-            didAutoScroll.current = true;
           }, 100);
         }}
-      />
+        />
+
+        {!revealed && (
+          <View style={s.loadingOverlay} pointerEvents="none">
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
+      </View>
+
+      <BottomNav navigation={navigation} current="year" />
     </SafeAreaView>
   );
 }
@@ -234,16 +289,18 @@ function formatDateRange(ev) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   yearSwitch: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 17, minWidth: 64, textAlign: 'center' },
 
   monthHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm, marginTop: spacing.md },
   month: { color: colors.primary, fontFamily: FF.semibold, fontSize: 13, textTransform: 'uppercase', letterSpacing: 1.2 },
+  monthPast: { color: colors.textFaint },
   nowChip: { color: '#000', backgroundColor: colors.primary, fontFamily: FF.semibold, fontSize: 9, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, overflow: 'hidden', letterSpacing: 0.6, textTransform: 'uppercase' },
 
   row: { ...layout.card({ flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border }) },
-  rowDone: { opacity: 0.55 },
+  rowFaded: { opacity: 0.5 },
+  trashBtn: { padding: spacing.xs, marginLeft: spacing.xs },
 
   dateCol: { width: 50, alignItems: 'center' },
   dateDay: { color: colors.text, fontFamily: FF.semibold, fontSize: 22, lineHeight: 26 },
@@ -252,6 +309,16 @@ const s = StyleSheet.create({
   titleDone: { textDecorationLine: 'line-through', color: colors.textMid },
   meta:  { color: colors.textMid, fontFamily: FF.light, fontSize: 12, marginTop: 2 },
   textDone: { color: colors.textMuted },
+
+  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  chipText: { fontFamily: FF.medium, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 },
+
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   empty: { padding: spacing.xxl, alignItems: 'center' },
   emptyTitle: { color: colors.text, fontFamily: FF.semibold, fontSize: 16, marginBottom: spacing.sm },

@@ -1,7 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-    <rect width="1024" height="1024" fill="#000000"/>
-    <circle cx="384" cy="332" r="76" fill="#F6237D"/>
-    <rect x="324" y="448" width="120" height="288" rx="60" fill="#F6237D"/>
-    <circle cx="640" cy="332" r="76" fill="#F6237D"/>
-    <rect x="580" y="448" width="120" height="288" rx="60" fill="#F6237D"/>
-  </svg>
+  <defs>
+    <radialGradient id="leftG" cx="35%" cy="32%" r="75%">
+      <stop offset="0%"   stop-color="#FF6FAE"  />
+      <stop offset="55%"  stop-color="#F6237D"      />
+      <stop offset="100%" stop-color="#B81A5E" />
+    </radialGradient>
+    <radialGradient id="rightG" cx="65%" cy="32%" r="75%">
+      <stop offset="0%"   stop-color="#FF6FAE"  />
+      <stop offset="55%"  stop-color="#F6237D"      />
+      <stop offset="100%" stop-color="#B81A5E" />
+    </radialGradient>
+    <radialGradient id="lensG" cx="50%" cy="42%" r="60%">
+      <stop offset="0%"   stop-color="#FFD1E5" stop-opacity="0.85" />
+      <stop offset="60%"  stop-color="#FF6FAE" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#FF6FAE" stop-opacity="0"    />
+    </radialGradient>
+    <clipPath id="leftClip">
+      <circle cx="372.8" cy="512" r="301.59999999999997" />
+    </clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#000000" />
+
+  <circle cx="372.8" cy="512" r="301.59999999999997" fill="url(#leftG)" />
+  <circle cx="651.2" cy="512" r="301.59999999999997" fill="url(#rightG)" />
+
+  <g clip-path="url(#leftClip)">
+    <circle cx="651.2" cy="512" r="301.59999999999997" fill="url(#lensG)" />
+  </g>
+
+  
+  <circle cx="512" cy="427.9" r="29" fill="#FFFFFF" fill-opacity="0.92" />
+  <rect x="483" y="480.1" width="58" height="156.6" rx="29" fill="#FFFFFF" fill-opacity="0.92" />
+  
+</svg>

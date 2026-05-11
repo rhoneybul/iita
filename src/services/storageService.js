@@ -150,17 +150,34 @@ function normaliseActivity(a) {
     title:    String(a.title || '').trim(),
     time:     String(a.time  || '').trim(),
     label:    a.label || '',
+    notes:    a.notes ? String(a.notes).trim() : null,
     together: !!a.together,
+    addedBy:  a.addedBy || '',
   };
+}
+
+async function currentDisplayName() {
+  const prefs = await getUserPrefs();
+  return prefs?.displayName || '';
 }
 
 export async function saveActivity(weekStart, dayKey, activity) {
   const week = await getWeek(weekStart);
   const day = week.days[dayKey] || emptyDay();
-  const next = normaliseActivity(activity);
+  const idx = day.activities.findIndex(a => a.id === activity.id);
+  const isNew = idx < 0;
+  // Stamp addedBy only on creation. Edits preserve whatever author the
+  // row already had; pre-existing rows without an author stay blank.
+  const stamped = isNew && !activity.addedBy
+    ? { ...activity, addedBy: await currentDisplayName() }
+    : activity;
+  const next = normaliseActivity(stamped);
   if (!next.title) return null;
-  const idx = day.activities.findIndex(a => a.id === next.id);
-  if (idx >= 0) day.activities[idx] = next; else day.activities.push(next);
+  if (isNew) {
+    day.activities.push(next);
+  } else {
+    day.activities[idx] = { ...next, addedBy: day.activities[idx].addedBy || next.addedBy };
+  }
   week.days[dayKey] = day;
   await saveWeek(week);
   return next;
@@ -178,12 +195,15 @@ export async function deleteActivity(weekStart, dayKey, activityId) {
 // the LLM/heuristic produced output for; leave other days untouched.
 export async function replaceDays(weekStart, daysPatch) {
   const week = await getWeek(weekStart);
+  const author = await currentDisplayName();
   for (const dayKey of Object.keys(daysPatch || {})) {
     if (!WEEKDAYS.includes(dayKey)) continue;
     const incoming = daysPatch[dayKey];
     if (!incoming || !Array.isArray(incoming.activities)) continue;
     week.days[dayKey] = {
-      activities: incoming.activities.map(normaliseActivity).filter(a => a.title),
+      activities: incoming.activities
+        .map(a => normaliseActivity({ ...a, addedBy: a.addedBy || author }))
+        .filter(a => a.title),
     };
   }
   await saveWeek(week);
@@ -259,6 +279,7 @@ export async function saveListItem(kind, item) {
     id: item.id || uid(),
     title: item.title,
     notes: item.notes || null,
+    label: item.label || null,
     done: !!item.done,
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
