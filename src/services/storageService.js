@@ -255,7 +255,18 @@ export async function getEvents() {
 export async function saveEvent(event) {
   if (!event.date || !event.title) throw new Error('event.date and event.title required');
   const events = await getEvents();
-  const data = { id: event.id || uid(), createdAt: new Date().toISOString(), ...event };
+  const existing = events.find(e => e.id === event.id);
+  const data = {
+    ...event,
+    id: event.id || uid(),
+    createdAt: existing?.createdAt || new Date().toISOString(),
+  };
+  // Stamp addedBy only on creation — edits preserve whichever name the
+  // event was first saved under so we can render "added by X" later if
+  // we want, and the partner's push reads the original adder.
+  if (!existing && !data.addedBy) {
+    data.addedBy = await currentDisplayName();
+  }
   const idx = events.findIndex(e => e.id === data.id);
   if (idx >= 0) events[idx] = data; else events.push(data);
   events.sort((a, b) => a.date.localeCompare(b.date));
@@ -273,7 +284,7 @@ export async function deleteEvent(id) {
 export async function bulkUpsertEvents(items) {
   const events = await getEvents();
   for (const it of items) {
-    const data = { id: it.id || uid(), createdAt: new Date().toISOString(), ...it };
+    const data = { ...it, id: it.id || uid(), createdAt: it.createdAt || new Date().toISOString() };
     const idx = events.findIndex(e => e.id === data.id);
     if (idx >= 0) events[idx] = data; else events.push(data);
   }
@@ -312,6 +323,7 @@ export async function saveListItem(kind, item) {
     title: item.title,
     notes: item.notes || null,
     label: item.label || null,
+    assigned_to: item.assigned_to || null,
     done: !!item.done,
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),

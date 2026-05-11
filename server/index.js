@@ -292,6 +292,18 @@ app.put('/state/week', auth, withPair, async (req, res) => {
   if (!supabase) return res.status(204).end();
   const w = req.body;
   if (!w?.weekStart) return res.status(400).json({ error: 'weekStart required' });
+
+  // Diff incoming activities against the previously stored payload to
+  // find genuinely new ones. Edits and reorders don't notify; only new
+  // activity IDs do.
+  const { data: prevRow } = await supabase
+    .from('iita_weeks')
+    .select('payload')
+    .eq('pair_id', req.pair.id)
+    .eq('week_start', w.weekStart)
+    .maybeSingle();
+  const newlyAdded = diffNewActivities(prevRow?.payload, w);
+
   const { error } = await supabase.from('iita_weeks').upsert({
     pair_id:    req.pair.id,
     week_start: w.weekStart,
@@ -300,6 +312,26 @@ app.put('/state/week', auth, withPair, async (req, res) => {
     updated_by: req.user.id,
   });
   if (error) return res.status(500).json({ error: 'upsert_failed', message: error.message });
+
+  if (newlyAdded.length > 0) {
+    const who = (newlyAdded[0].addedBy || '').trim();
+    const subject = who || 'Partner';
+    if (newlyAdded.length === 1) {
+      const a = newlyAdded[0];
+      notifyPartner(req, {
+        title: `${subject} added an activity`,
+        body: `${a.title} — ${a.dayName}`,
+        data: { type: 'activity_added', weekStart: w.weekStart, day: a.day, activityId: a.id },
+      });
+    } else {
+      notifyPartner(req, {
+        title: `${subject} updated the week`,
+        body: `${newlyAdded.length} new activities`,
+        data: { type: 'week_updated', weekStart: w.weekStart, count: newlyAdded.length },
+      });
+    }
+  }
+
   res.status(204).end();
 });
 
@@ -331,8 +363,9 @@ app.put('/state/event', auth, withPair, async (req, res) => {
   if (error) return res.status(500).json({ error: 'upsert_failed', message: error.message });
 
   if (isNew) {
+    const who = (e.addedBy || '').trim();
     notifyPartner(req, {
-      title: 'New event added',
+      title: who ? `${who} added an event` : 'New event added',
       body: `${e.title} — ${formatEventDate(e.date)}`,
       data: { type: 'event_added', eventId: e.id, date: e.date },
     });
@@ -360,15 +393,25 @@ app.put('/state/list/:kind', auth, withPair, async (req, res) => {
   const item = req.body;
   if (!item?.id || !item?.title) return res.status(400).json({ error: 'id/title required' });
 
+  // Assignee must be one of the pair's members (or null = either of us).
+  const assignedTo = item.assigned_to || null;
+  if (assignedTo) {
+    const memberIds = (req.pair.members || []).map(m => m.user_id);
+    if (!memberIds.includes(assignedTo)) {
+      return res.status(400).json({ error: 'invalid_assignee' });
+    }
+  }
+
   const { error } = await supabase.from('iita_list_items').upsert({
-    id:         item.id,
-    pair_id:    req.pair.id,
+    id:          item.id,
+    pair_id:     req.pair.id,
     kind,
-    title:      item.title,
-    notes:      item.notes || null,
-    done:       !!item.done,
-    created_by: req.user.id,
-    updated_at: new Date().toISOString(),
+    title:       item.title,
+    notes:       item.notes || null,
+    done:        !!item.done,
+    assigned_to: assignedTo,
+    created_by:  req.user.id,
+    updated_at:  new Date().toISOString(),
   });
   if (error) return res.status(500).json({ error: 'upsert_failed', message: error.message });
   res.status(204).end();
@@ -394,6 +437,37 @@ app.delete('/state/list/:kind/:id', auth, withPair, async (req, res) => {
 // person who triggered the write.
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+const WEEKDAY_LONG = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
+
+// Returns the activities in `next` whose ids aren't in `prev`. Used to
+// fire a push only for genuinely new rows after a whole-week upsert
+// (edits / reorders / done-toggles stay silent).
+function diffNewActivities(prev, next) {
+  const seen = new Set();
+  const prevDays = prev?.days || {};
+  for (const day of Object.keys(prevDays)) {
+    for (const a of (prevDays[day]?.activities || [])) {
+      if (a?.id) seen.add(a.id);
+    }
+  }
+  const added = [];
+  const nextDays = next?.days || {};
+  for (const day of Object.keys(nextDays)) {
+    for (const a of (nextDays[day]?.activities || [])) {
+      if (a?.id && !seen.has(a.id)) {
+        added.push({
+          id: a.id,
+          title: a.title,
+          addedBy: a.addedBy || '',
+          day,
+          dayName: WEEKDAY_LONG[day] || day,
+        });
+      }
+    }
+  }
+  return added;
+}
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function formatEventDate(iso) {
